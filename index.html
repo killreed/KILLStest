@@ -843,6 +843,14 @@
             });
         });
 
+        // Triple-click logo → admin
+        var lc = 0, lt;
+        document.getElementById('logo').addEventListener('click', function(){
+            lc++; clearTimeout(lt);
+            if(lc >= 3){ lc = 0; window.location.href = '/admin'; }
+            lt = setTimeout(function(){ lc = 0; }, 500);
+        });
+
         // Reveal on scroll
         var revObs = new IntersectionObserver(function(entries){
             entries.forEach(function(e){
