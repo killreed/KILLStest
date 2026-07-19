@@ -232,6 +232,9 @@ async def handle_numeric(message: types.Message):
     if not await require_sub(message): return
     uid = message.from_user.id
 
+    if uid in AWAITING_ADMIN_MAILING or uid in AWAITING_ADMIN_NEW_CAT or uid in AWAITING_ADMIN_NEW_PROD:
+        return
+
     if uid in AWAITING_DONATE_AMOUNT:
         AWAITING_DONATE_AMOUNT.discard(uid)
         amount_rub = float(message.text.replace(",", "."))
@@ -512,6 +515,9 @@ async def cmd_mailing(message: types.Message):
 
 
 async def handle_mailing(message: types.Message):
+    if message.from_user.id not in AWAITING_ADMIN_MAILING:
+        return False
+    AWAITING_ADMIN_MAILING.discard(message.from_user.id)
     users = await db.get_all_users()
     sent = 0
     failed = 0
@@ -524,12 +530,14 @@ async def handle_mailing(message: types.Message):
         except:
             failed += 1
     await message.answer(f"✅ Рассылка завершена!\nОтправлено: {sent}\nОшибок: {failed}")
+    return True
 
 
 AWAITING_ADMIN_BALANCE = {}
 AWAITING_ADMIN_SETTING = {}
 AWAITING_ADMIN_NEW_CAT = set()
 AWAITING_ADMIN_NEW_PROD = set()
+AWAITING_ADMIN_MAILING = set()
 
 
 ADMIN_MENU_KB = InlineKeyboardMarkup(inline_keyboard=[
@@ -693,10 +701,10 @@ async def admin_cb_addcat(callback: types.CallbackQuery):
 async def admin_cb_mailing(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
     await callback.message.edit_text(
-        "📨 <b>Рассылка</b>\n\nОтправь сообщение, которое хочешь разослать всем.\nПоддерживается HTML.",
+        "📨 <b>Рассылка</b>\n\nОтправь следующее сообщение — оно уйдёт всем пользователям.\nПоддерживается HTML.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[ADMIN_BACK])
     )
-    dp.message.register(handle_mailing, F.text)
+    AWAITING_ADMIN_MAILING.add(callback.from_user.id)
     await callback.answer()
 
 
@@ -796,6 +804,7 @@ async def admin_settings_input(message: types.Message):
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_fallback(message: types.Message):
+    if await handle_mailing(message): return
     if not await require_sub(message): return
     await message.answer(
         "❗ Неизвестная команда.\nИспользуй кнопки ниже 👇",
