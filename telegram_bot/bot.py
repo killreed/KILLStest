@@ -365,13 +365,15 @@ async def handle_numeric(message: types.Message):
             amount=price
         )
         await db.update_order_status(order_id, "completed")
-        await message.answer(
-            f"✅ <b>Покупка совершена!</b>\n\n"
-            f"📦 Товар: {product['name']}\n"
-            f"💰 Цена: {price}₽\n"
-            f"🆔 Заказ: #{order_id}\n\n"
-            f"Спасибо за покупку!"
-        )
+        text = f"✅ <b>Покупка совершена!</b>\n\n📦 Товар: {product['name']}\n💰 Цена: {price}₽\n🆔 Заказ: #{order_id}\n\n"
+        if product.get("description"):
+            text += f"📄 <b>Товар:</b>\n<code>{product['description']}</code>"
+        await message.answer(text)
+        if product.get("file_id"):
+            try:
+                await message.answer_document(product["file_id"])
+            except:
+                pass
 
 
 # ── Мои покупки ──
