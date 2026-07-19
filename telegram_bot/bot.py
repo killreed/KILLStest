@@ -3,11 +3,14 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 import database as db
-from config import BOT_TOKEN, ADMIN_IDS, WALLET_ADDRESS, CURRENCY
+from config import BOT_TOKEN, ADMIN_IDS, WALLET_ADDRESS, CURRENCY, PROXY
 
 
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+session = AiohttpSession(proxy=PROXY) if PROXY else None
+bot = Bot(token=BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 
@@ -221,6 +224,17 @@ async def my_orders(callback: types.CallbackQuery):
 async def main():
     await db.init_db()
     print("Бот запущен!")
+
+    port = int(os.getenv("PORT", 10000))
+
+    async def healthcheck():
+        handler = await asyncio.start_server(
+            lambda r, w: None, host="0.0.0.0", port=port
+        )
+        async with handler:
+            await handler.serve_forever()
+
+    asyncio.create_task(healthcheck())
     await dp.start_polling(bot)
 
 
