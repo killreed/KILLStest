@@ -223,10 +223,13 @@ async def get_or_create_ref(user_id):
                 return dict(row)
         import secrets, string
         code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-        await db.execute("INSERT INTO referrals (user_id, ref_code) VALUES (?, ?)", (user_id, code))
+        await db.execute("INSERT OR IGNORE INTO referrals (user_id, ref_code) VALUES (?, ?)", (user_id, code))
         await db.commit()
         async with db.execute("SELECT * FROM referrals WHERE user_id = ?", (user_id,)) as cur:
-            return dict(await cur.fetchone())
+            row = await cur.fetchone()
+            if row:
+                return dict(row)
+            return {"id": 0, "user_id": user_id, "ref_code": code, "earned": 0}
 
 
 async def apply_ref(code, used_by, order_id):
