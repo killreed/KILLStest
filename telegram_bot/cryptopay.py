@@ -24,9 +24,7 @@ async def create_invoice(asset, amount, description=""):
     return await _post("createInvoice", {
         "asset": asset,
         "amount": str(amount),
-        "description": description,
-        "paid_btn_name": "callback",
-        "paid_btn_url": SITE_URL
+        "description": description
     })
 
 

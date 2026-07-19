@@ -4,7 +4,7 @@ import os
 import httpx
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 import database as db
@@ -30,14 +30,11 @@ AWAITING_MAILING_TEXT = set()
 def reply_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🛍 Каталог")],
-            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="💰 Пополнить")],
-            [KeyboardButton(text="📦 Мои покупки"), KeyboardButton(text="🔗 Рефералка")],
-            [KeyboardButton(text="💸 Передать")]
+            [KeyboardButton(text="🛍 Каталог"), KeyboardButton(text="👤 Профиль")]
         ],
         resize_keyboard=True,
         is_persistent=True,
-        input_field_placeholder="Выберите действие..."
+        input_field_placeholder="Меню..."
     )
 
 
@@ -148,6 +145,12 @@ async def reply_profile(message: types.Message):
     orders = await db.get_user_orders(message.from_user.id)
     completed = len([o for o in orders if o["status"] == "completed"])
     ref = await db.get_or_create_ref(message.from_user.id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 Пополнить", callback_data="deposit"),
+         InlineKeyboardButton(text="📦 Мои покупки", callback_data="my_orders")],
+        [InlineKeyboardButton(text="🔗 Рефералка", callback_data="referral"),
+         InlineKeyboardButton(text="💸 Передать", callback_data="transfer")]
+    ])
     await message.answer(
         f"👤 <b>Мой профиль</b>\n\n"
         f"🪪 ID: <code>{user['id']}</code>\n"
@@ -155,7 +158,8 @@ async def reply_profile(message: types.Message):
         f"🛒 Покупок: {len(orders)}\n"
         f"💵 Потрачено: {user['total_spent']:.2f}₽\n"
         f"🔗 Рефералов: {ref['earned']:.2f}₽\n"
-        f"🗓 Рега: {user['registered_at']}"
+        f"🗓 Рега: {user['registered_at']}",
+        reply_markup=kb
     )
 
 
@@ -164,13 +168,24 @@ async def reply_profile(message: types.Message):
 @dp.message(F.text == "💰 Пополнить")
 async def reply_deposit(message: types.Message):
     if not await require_sub(message): return
-    await message.answer(
+    await prompt_deposit(message)
+
+
+@dp.callback_query(F.data == "deposit")
+async def callback_deposit(callback: types.CallbackQuery):
+    if not await require_sub(callback.message): return
+    await prompt_deposit(callback.message)
+    await callback.answer()
+
+
+async def prompt_deposit(msg: types.Message):
+    await msg.answer(
         "💰 <b>Пополнение баланса</b>\n\n"
         "Введите сумму в рублях (₽), которую хотите внести.\n"
         "Оплата через Crypto Bot (USDT по курсу).\n\n"
         "Например: <code>500</code>"
     )
-    AWAITING_DEPOSIT_AMOUNT.add(message.from_user.id)
+    AWAITING_DEPOSIT_AMOUNT.add(msg.from_user.id)
 
 
 @dp.message(F.text.regexp(r'^\d+([.,]\d+)?$'))
@@ -213,7 +228,8 @@ async def handle_numeric(message: types.Message):
                     f"✅ После оплаты баланс пополнится автоматически"
                 )
             else:
-                await message.answer("❌ Ошибка создания счёта. Попробуй позже.")
+                err = inv.get("error") if inv else "Нет ответа от Crypto Bot"
+                await message.answer(f"❌ Crypto Bot: {err}")
         except Exception as e:
             await message.answer(f"❌ Ошибка: {e}")
         return
@@ -289,15 +305,26 @@ async def handle_numeric(message: types.Message):
 @dp.message(F.text == "📦 Мои покупки")
 async def reply_my_orders(message: types.Message):
     if not await require_sub(message): return
-    orders = await db.get_user_orders(message.from_user.id)
+    await show_my_orders(message)
+
+
+@dp.callback_query(F.data == "my_orders")
+async def callback_my_orders(callback: types.CallbackQuery):
+    if not await require_sub(callback.message): return
+    await show_my_orders(callback.message)
+    await callback.answer()
+
+
+async def show_my_orders(msg: types.Message):
+    orders = await db.get_user_orders(msg.from_user.id)
     if not orders:
-        await message.answer("📦 <b>Ваши покупки</b>\n\nУ вас пока нет заказов.")
+        await msg.answer("📦 <b>Ваши покупки</b>\n\nУ вас пока нет заказов.")
         return
     text = "📦 <b>Ваши покупки:</b>\n\n"
     for order in orders[:10]:
         emoji = "✅" if order["status"] == "completed" else "⏳"
         text += f"{emoji} #{order['id']} — {order['product_name']} ({order['amount']}₽)\n"
-    await message.answer(text)
+    await msg.answer(text)
 
 
 # ── Рефералка ──
@@ -305,9 +332,20 @@ async def reply_my_orders(message: types.Message):
 @dp.message(F.text == "🔗 Рефералка")
 async def reply_ref(message: types.Message):
     if not await require_sub(message): return
-    ref = await db.get_or_create_ref(message.from_user.id)
+    await show_ref(message)
+
+
+@dp.callback_query(F.data == "referral")
+async def callback_ref(callback: types.CallbackQuery):
+    if not await require_sub(callback.message): return
+    await show_ref(callback.message)
+    await callback.answer()
+
+
+async def show_ref(msg: types.Message):
+    ref = await db.get_or_create_ref(msg.from_user.id)
     bot_username = (await bot.me()).username
-    await message.answer(
+    await msg.answer(
         f"🔗 <b>Реферальная программа</b>\n\n"
         f"Приглашай друзей и получай 5% от их покупок!\n\n"
         f"Твоя ссылка:\n"
@@ -321,12 +359,23 @@ async def reply_ref(message: types.Message):
 @dp.message(F.text == "💸 Передать")
 async def reply_transfer(message: types.Message):
     if not await require_sub(message): return
-    await message.answer(
+    await prompt_transfer(message)
+
+
+@dp.callback_query(F.data == "transfer")
+async def callback_transfer(callback: types.CallbackQuery):
+    if not await require_sub(callback.message): return
+    await prompt_transfer(callback.message)
+    await callback.answer()
+
+
+async def prompt_transfer(msg: types.Message):
+    await msg.answer(
         "💸 <b>Перевод средств</b>\n\n"
         "Введите <b>@username</b> или <b>ID</b> пользователя, "
         "которому хотите перевести деньги:"
     )
-    AWAITING_TRANSFER_TARGET.add(message.from_user.id)
+    AWAITING_TRANSFER_TARGET.add(msg.from_user.id)
 
 
 # ── Handle @username for transfer target ──
