@@ -2,7 +2,7 @@
 import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -17,17 +17,15 @@ dp = Dispatcher()
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog")],
-        [InlineKeyboardButton(text="📦 Мои покупки", callback_data="my_orders")],
-        [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")]
-    ])
-
     await message.answer(
-        "👋 <b>Добро пожаловать!</b>\n\n"
+        "👋 <b>Добро пожаловать в KILLStest!</b>\n\n"
         "Я бот для продажи цифровых товаров.\n"
-        "Выберите раздел в меню ниже:",
-        reply_markup=keyboard
+        "Используй кнопки ниже 👇",
+        reply_markup=reply_menu()
+    )
+    await message.answer(
+        "Выберите раздел:",
+        reply_markup=main_menu_keyboard()
     )
 
 
@@ -49,17 +47,28 @@ async def cmd_help(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: types.CallbackQuery):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog")],
-        [InlineKeyboardButton(text="📦 Мои покупки", callback_data="my_orders")],
-        [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")]
-    ])
-
     await callback.message.edit_text(
         "👋 <b>Главное меню</b>\n\nВыберите раздел:",
-        reply_markup=keyboard
+        reply_markup=main_menu_keyboard()
     )
     await callback.answer()
+
+
+async def show_catalog_by_message(message: types.Message):
+    products = await db.get_products(active_only=True)
+    if not products:
+        await message.answer("😔 <b>Каталог пуст</b>\n\nТовары скоро появятся!",
+                             reply_markup=main_menu_keyboard())
+        return
+    kb = []
+    for p in products:
+        kb.append([InlineKeyboardButton(text=f"{p['name']} - {p['price']} {CURRENCY}",
+                                        callback_data=f"product_{p['id']}")])
+    kb.append([InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")])
+    await message.answer(
+        "🛍 <b>Каталог товаров</b>\n\nВыберите товар:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb)
+    )
 
 
 @dp.callback_query(F.data == "catalog")
@@ -152,6 +161,141 @@ async def buy_product(callback: types.CallbackQuery):
 
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
+
+
+# ── Reply menu ──
+
+def main_menu_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛍 Каталог", callback_data="catalog")],
+        [InlineKeyboardButton(text="📦 Мои покупки", callback_data="my_orders")],
+        [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")]
+    ])
+
+
+def reply_menu():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🛍 Каталог"), KeyboardButton(text="📦 Мои покупки")],
+            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="👤 Профиль")]
+        ],
+        resize_keyboard=True
+    )
+
+
+@dp.message(F.text == "🛍 Каталог")
+async def reply_catalog(message: types.Message):
+    await show_catalog_by_message(message)
+
+
+@dp.message(F.text == "📦 Мои покупки")
+async def reply_my_orders(message: types.Message):
+    orders = await db.get_user_orders(message.from_user.id)
+    if not orders:
+        await message.answer("📦 <b>Ваши покупки</b>\n\nУ вас пока нет заказов.",
+                             reply_markup=main_menu_keyboard())
+        return
+    text = "📦 <b>Ваши покупки:</b>\n\n"
+    for order in orders[:10]:
+        emoji = "✅" if order["status"] == "completed" else "⏳"
+        text += f"{emoji} #{order['id']} - {order['product_name']} ({order['amount']} {CURRENCY})\n"
+    await message.answer(text, reply_markup=main_menu_keyboard())
+
+
+@dp.message(F.text == "ℹ️ Помощь")
+async def reply_help(message: types.Message):
+    await message.answer(
+        "📚 <b>Как это работает:</b>\n\n"
+        "1️⃣ Выберите товар в каталоге\n"
+        "2️⃣ Оплатите криптовалютой USDT TRC20\n"
+        "3️⃣ Отправьте хеш транзакции\n"
+        "4️⃣ Получите товар\n\n"
+        "💬 Поддержка: @accounts22",
+        reply_markup=main_menu_keyboard()
+    )
+
+
+@dp.message(F.text == "👤 Профиль")
+async def reply_profile(message: types.Message):
+    orders = await db.get_user_orders(message.from_user.id)
+    completed = len([o for o in orders if o["status"] == "completed"])
+    total = len(orders)
+    await message.answer(
+        f"👤 <b>Профиль</b>\n\n"
+        f"ID: <code>{message.from_user.id}</code>\n"
+        f"Username: @{message.from_user.username or 'не указан'}\n"
+        f"Всего заказов: {total}\n"
+        f"Выполнено: {completed}",
+        reply_markup=main_menu_keyboard()
+    )
+
+
+@dp.message(Command("admin"))
+async def cmd_admin(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Доступ запрещён.")
+        return
+    stats = await db.get_stats()
+    text = (
+        f"📊 <b>Статистика магазина</b>\n\n"
+        f"📦 Товаров: {stats['products']}\n"
+        f"🛒 Заказов всего: {stats['total_orders']}\n"
+        f"⏳ Ожидают: {stats['pending_orders']}\n"
+        f"✅ Выполнено: {stats['completed_orders']}\n"
+        f"💰 Выручка: {stats['total_revenue']} {CURRENCY}\n"
+        f"👥 Покупателей: {stats['unique_buyers']}"
+    )
+    await message.answer(text)
+
+
+# ── Admin confirm/reject ──
+
+@dp.callback_query(F.data.startswith("confirm_"))
+async def confirm_payment(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    order_id = int(callback.data.split("_")[1])
+    await db.update_order_status(order_id, "completed")
+    order = await db.get_order(order_id)
+    await callback.message.edit_text(
+        callback.message.text + "\n\n✅ <b>Оплата подтверждена!</b>"
+    )
+    await callback.answer("✅ Заказ подтверждён", show_alert=True)
+    if order:
+        try:
+            await bot.send_message(
+                order["user_id"],
+                f"✅ <b>Оплата подтверждена!</b>\n\n"
+                f"Заказ #{order_id} — {order['product_name']}\n"
+                f"Спасибо за покупку!"
+            )
+        except:
+            pass
+
+
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_payment(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+    order_id = int(callback.data.split("_")[1])
+    await db.update_order_status(order_id, "rejected")
+    order = await db.get_order(order_id)
+    await callback.message.edit_text(
+        callback.message.text + "\n\n❌ <b>Платёж отклонён</b>"
+    )
+    await callback.answer("❌ Заказ отклонён", show_alert=True)
+    if order:
+        try:
+            await bot.send_message(
+                order["user_id"],
+                f"❌ <b>Платёж отклонён</b>\n\n"
+                f"Заказ #{order_id} — {order['product_name']}\n"
+                f"Свяжитесь с поддержкой: @accounts22"
+            )
+        except:
+            pass
 
 
 @dp.message(F.text & ~F.text.startswith("/"))
