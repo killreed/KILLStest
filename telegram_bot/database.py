@@ -62,6 +62,27 @@ async def init_db():
             )
         """)
 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                balance REAL DEFAULT 0,
+                total_spent REAL DEFAULT 0,
+                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS crypto_invoices (
+                invoice_id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                amount_rub REAL NOT NULL,
+                amount_usdt REAL NOT NULL,
+                status TEXT DEFAULT 'active'
+            )
+        """)
+
         await db.commit()
 
 
@@ -223,10 +244,9 @@ async def apply_ref(code, used_by, order_id):
 
 
 async def get_all_users():
-    """Возвращает всех пользователей, которые когда-либо писали боту."""
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT DISTINCT user_id, username FROM orders") as cur:
+        async with db.execute("SELECT id as user_id, username FROM users") as cur:
             return [dict(r) for r in await cur.fetchall()]
 
 
@@ -252,6 +272,93 @@ async def use_promo_code(code):
             (code.upper(),)
         )
         await db.commit()
+
+
+# ── Crypto Invoices ──
+
+async def save_invoice(invoice_id, user_id, amount_rub, amount_usdt):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO crypto_invoices (invoice_id, user_id, amount_rub, amount_usdt) VALUES (?, ?, ?, ?)",
+            (invoice_id, user_id, amount_rub, amount_usdt)
+        )
+        await db.commit()
+
+
+async def get_invoice(invoice_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM crypto_invoices WHERE invoice_id = ?", (invoice_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def complete_invoice(invoice_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("UPDATE crypto_invoices SET status = 'paid' WHERE invoice_id = ?", (invoice_id,))
+        await db.commit()
+
+
+# ── Balance ──
+
+async def upsert_user(user_id, username=None, first_name=None):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT INTO users (id, username, first_name)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                username = COALESCE(?, username),
+                first_name = COALESCE(?, first_name)
+        """, (user_id, username, first_name, username, first_name))
+        await db.commit()
+
+
+async def get_user(user_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cur:
+            row = await cur.fetchone()
+            if row:
+                return dict(row)
+        await db.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
+        await db.commit()
+        async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cur:
+            return dict(await cur.fetchone())
+
+
+async def add_balance(user_id, amount):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, user_id))
+        await db.commit()
+
+
+async def deduct_balance(user_id, amount):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("UPDATE users SET balance = balance - ?, total_spent = total_spent + ? WHERE id = ?",
+                         (amount, amount, user_id))
+        await db.commit()
+
+
+async def transfer_balance(from_id, to_id, amount):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (amount, from_id))
+        await db.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, to_id))
+        await db.commit()
+
+
+async def find_user_by_username(username):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE username = ?", (username.lstrip("@"),)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def get_all_db_users():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users ORDER BY registered_at DESC") as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_stats():

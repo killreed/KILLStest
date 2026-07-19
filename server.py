@@ -1,5 +1,9 @@
 import os
+import hmac
+import hashlib
 import sqlite3
+import asyncio
+import httpx
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, session
 from dotenv import load_dotenv
@@ -11,6 +15,7 @@ app.secret_key = os.getenv("FLASK_SECRET", os.urandom(24).hex())
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "telegram_bot/database.db")
+CRYPTO_BOT_TOKEN = os.getenv("CRYPTO_BOT_TOKEN")
 
 
 def init_db():
@@ -211,15 +216,53 @@ def send_message():
         return jsonify({'error': str(e)}), 500
 
 
+# ── Crypto Bot Webhook ──
+
+@app.route('/api/crypto-webhook', methods=['POST'])
+def crypto_webhook():
+    if not CRYPTO_BOT_TOKEN:
+        return jsonify({'error': 'Not configured'}), 500
+    body = request.get_data(as_text=True)
+    sign = request.headers.get('crypto-pay-api-signature', '')
+    expected = hmac.new(CRYPTO_BOT_TOKEN.encode(), body.encode(), hashlib.sha256).hexdigest()
+    if sign != expected:
+        return jsonify({'error': 'Invalid signature'}), 403
+
+    data = request.get_json(silent=True) or {}
+    payload = data.get('payload', {})
+    if payload.get('status') == 'paid':
+        invoice_id = int(payload['invoice_id'])
+        try:
+            loop = asyncio.new_event_loop()
+            from telegram_bot.database import get_invoice, complete_invoice, add_balance, get_user
+            inv = loop.run_until_complete(get_invoice(invoice_id))
+            if inv and inv['status'] == 'active':
+                loop.run_until_complete(complete_invoice(invoice_id))
+                loop.run_until_complete(add_balance(inv['user_id'], inv['amount_rub']))
+                try:
+                    from telegram_bot.bot import bot as tg_bot
+                    loop.run_until_complete(tg_bot.send_message(
+                        inv['user_id'],
+                        f"✅ <b>Баланс пополнен!</b>\n\n"
+                        f"Сумма: <b>{inv['amount_rub']:.2f}₽</b>\n"
+                        f"Текущий баланс: можно проверить в 👤 Профиль"
+                    ))
+                except:
+                    pass
+            loop.close()
+        except Exception as e:
+            print(f"Crypto webhook error: {e}")
+
+    return jsonify({'ok': True})
+
+
 # ── Admin Mailing ──
 
 @app.route('/api/admin/users', methods=['GET'])
 @login_required
 def admin_users():
     conn = get_db()
-    rows = conn.execute(
-        "SELECT DISTINCT user_id, username FROM orders UNION SELECT id as user_id, username FROM users"
-    ).fetchall()
+    rows = conn.execute("SELECT id as user_id, username, balance FROM users").fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
 
