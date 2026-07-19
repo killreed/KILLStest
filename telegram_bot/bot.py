@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import os
 import httpx
@@ -8,7 +8,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 import database as db
-from config import BOT_TOKEN, ADMIN_IDS, CURRENCY, CRYPTO_BOT_TOKEN, SITE_URL
+from config import BOT_TOKEN, ADMIN_IDS, CURRENCY, CRYPTO_BOT_TOKEN, SITE_URL, CHANNEL_USERNAME, CHANNEL_ID
 import cryptopay
 
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +41,16 @@ def reply_menu():
     )
 
 
+# ── Subscription check ──
+
+async def is_subscribed(user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(CHANNEL_ID, user_id)
+        return member.status in ("member", "creator", "administrator")
+    except:
+        return False
+
+
 # ── Start ──
 
 @dp.message(CommandStart())
@@ -60,6 +70,20 @@ async def cmd_start(message: types.Message):
     if ref_code:
         await db.apply_ref(ref_code, message.from_user.id, 0)
 
+    if not await is_subscribed(message.from_user.id):
+        kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="✅ Я подписался")]],
+            resize_keyboard=True
+        )
+        await message.answer(
+            f"🔒 <b>Доступ ограничен</b>\n\n"
+            f"Чтобы пользоваться ботом, подпишись на канал:\n"
+            f"{CHANNEL_USERNAME}\n\n"
+            f"После подписки нажми кнопку ниже 👇",
+            reply_markup=kb
+        )
+        return
+
     await message.answer(
         "👋 <b>Добро пожаловать в KILLStest!</b>\n\n"
         "Используй кнопки ниже 👇",
@@ -67,10 +91,43 @@ async def cmd_start(message: types.Message):
     )
 
 
+@dp.message(F.text == "✅ Я подписался")
+async def check_sub_after_button(message: types.Message):
+    if await is_subscribed(message.from_user.id):
+        await message.answer(
+            "✅ <b>Подписка подтверждена!</b>\n\n"
+            "Добро пожаловать 👇",
+            reply_markup=reply_menu()
+        )
+    else:
+        await message.answer(
+            f"❌ Ты ещё не подписан на {CHANNEL_USERNAME}.\n"
+            f"Подпишись и нажми кнопку снова."
+        )
+
+
 # ── Каталог ──
+
+# ── Subscription guard ──
+
+async def require_sub(message: types.Message) -> bool:
+    if await is_subscribed(message.from_user.id):
+        return True
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="✅ Я подписался")]],
+        resize_keyboard=True
+    )
+    await message.answer(
+        f"🔒 <b>Доступ ограничен</b>\n\n"
+        f"Подпишись на канал {CHANNEL_USERNAME}",
+        reply_markup=kb
+    )
+    return False
+
 
 @dp.message(F.text == "🛍 Каталог")
 async def reply_catalog(message: types.Message):
+    if not await require_sub(message): return
     products = await db.get_products(active_only=True)
     if not products:
         await message.answer("😔 <b>Каталог пуст</b>\n\nТовары скоро появятся!")
@@ -86,6 +143,7 @@ async def reply_catalog(message: types.Message):
 
 @dp.message(F.text == "👤 Профиль")
 async def reply_profile(message: types.Message):
+    if not await require_sub(message): return
     user = await db.get_user(message.from_user.id)
     orders = await db.get_user_orders(message.from_user.id)
     completed = len([o for o in orders if o["status"] == "completed"])
@@ -105,6 +163,7 @@ async def reply_profile(message: types.Message):
 
 @dp.message(F.text == "💰 Пополнить")
 async def reply_deposit(message: types.Message):
+    if not await require_sub(message): return
     await message.answer(
         "💰 <b>Пополнение баланса</b>\n\n"
         "Введите сумму в рублях (₽), которую хотите внести.\n"
@@ -116,6 +175,7 @@ async def reply_deposit(message: types.Message):
 
 @dp.message(F.text.regexp(r'^\d+([.,]\d+)?$'))
 async def handle_numeric(message: types.Message):
+    if not await require_sub(message): return
     uid = message.from_user.id
 
     if uid in AWAITING_DEPOSIT_AMOUNT:
@@ -228,6 +288,7 @@ async def handle_numeric(message: types.Message):
 
 @dp.message(F.text == "📦 Мои покупки")
 async def reply_my_orders(message: types.Message):
+    if not await require_sub(message): return
     orders = await db.get_user_orders(message.from_user.id)
     if not orders:
         await message.answer("📦 <b>Ваши покупки</b>\n\nУ вас пока нет заказов.")
@@ -243,6 +304,7 @@ async def reply_my_orders(message: types.Message):
 
 @dp.message(F.text == "🔗 Рефералка")
 async def reply_ref(message: types.Message):
+    if not await require_sub(message): return
     ref = await db.get_or_create_ref(message.from_user.id)
     bot_username = (await bot.me()).username
     await message.answer(
@@ -258,6 +320,7 @@ async def reply_ref(message: types.Message):
 
 @dp.message(F.text == "💸 Передать")
 async def reply_transfer(message: types.Message):
+    if not await require_sub(message): return
     await message.answer(
         "💸 <b>Перевод средств</b>\n\n"
         "Введите <b>@username</b> или <b>ID</b> пользователя, "
@@ -270,6 +333,7 @@ async def reply_transfer(message: types.Message):
 
 @dp.message(F.text.regexp(r'^@\w+$'))
 async def handle_at_mention(message: types.Message):
+    if not await require_sub(message): return
     if message.from_user.id not in AWAITING_TRANSFER_TARGET:
         return
     AWAITING_TRANSFER_TARGET.discard(message.from_user.id)
@@ -359,6 +423,7 @@ async def cmd_admin(message: types.Message):
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_fallback(message: types.Message):
+    if not await require_sub(message): return
     await message.answer(
         "❗ Неизвестная команда.\nИспользуй кнопки ниже 👇",
         reply_markup=reply_menu()

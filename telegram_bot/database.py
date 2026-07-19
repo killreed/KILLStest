@@ -1,4 +1,4 @@
-﻿import aiosqlite
+import aiosqlite
 from config import DATABASE_PATH
 
 

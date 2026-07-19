@@ -1,4 +1,4 @@
-﻿import os
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,4 +10,6 @@ CURRENCY = os.getenv("CURRENCY", "USDT")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "database.db")
 CRYPTO_BOT_TOKEN = os.getenv("CRYPTO_BOT_TOKEN")
 SITE_URL = os.getenv("SITE_URL", "https://killstest-site.onrender.com")
+CHANNEL_USERNAME = "@testwwdnwd1212"
+CHANNEL_ID = "@testwwdnwd1212"  # или числовой ID
 # PROXY = os.getenv("PROXY")  # не используется
