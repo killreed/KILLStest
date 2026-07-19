@@ -593,20 +593,7 @@ async def cmd_admin(message: types.Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Доступ запрещён.")
         return
-    await message.answer("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=ADMIN_MENU_KB)
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔ Доступ запрещён.")
-        return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
-         InlineKeyboardButton(text="📦 Товары", callback_data="admin_products")],
-        [InlineKeyboardButton(text="📂 Категории", callback_data="admin_cats"),
-         InlineKeyboardButton(text="📨 Рассылка", callback_data="admin_mailing")],
-        [InlineKeyboardButton(text="💳 Выдать баланс", callback_data="admin_balance"),
-         InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_settings")],
-        BK
-    ])
-    await message.answer("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=kb)
+    await admin_main_menu(message)
 
 
 @dp.callback_query(F.data == "admin_stats")
