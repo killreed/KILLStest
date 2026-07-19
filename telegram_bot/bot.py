@@ -46,7 +46,7 @@ async def is_subscribed(user_id: int) -> bool:
         member = await bot.get_chat_member(CHANNEL_ID, user_id)
         return member.status in ("member", "creator", "administrator")
     except:
-        return False
+        return True  # если бот не админ — пропускаем всех
 
 
 # ── Start ──
