@@ -8,7 +8,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 import database as db
-from config import BOT_TOKEN, ADMIN_IDS, CURRENCY, CRYPTO_BOT_TOKEN, SITE_URL, CHANNEL_USERNAME, CHANNEL_ID
+from config import BOT_TOKEN, ADMIN_IDS, CURRENCY, CRYPTO_BOT_TOKEN, SITE_URL, CHANNEL_USERNAME, CHANNEL_ID, OWNER_USERNAME, DONATE_LINK
 import cryptopay
 
 logging.basicConfig(level=logging.INFO)
@@ -30,7 +30,8 @@ AWAITING_MAILING_TEXT = set()
 def reply_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🛍 Каталог"), KeyboardButton(text="👤 Профиль")]
+            [KeyboardButton(text="🛍 Каталог"), KeyboardButton(text="👤 Профиль")],
+            [KeyboardButton(text="ℹ️ О магазине")]
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -122,6 +123,40 @@ async def require_sub(message: types.Message) -> bool:
     return False
 
 
+# ── О магазине ──
+
+@dp.message(F.text == "ℹ️ О магазине")
+async def reply_about(message: types.Message):
+    if not await require_sub(message): return
+    bot_username = (await bot.me()).username
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📱 Наш бот", url=f"https://t.me/{bot_username}")],
+        [InlineKeyboardButton(text="☕️ Кинуть на чай", callback_data="donate")],
+        [InlineKeyboardButton(text="👤 Владелец", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")]
+    ])
+    await message.answer(
+        "ℹ️ <b>О магазине KILLStest</b>\n\n"
+        "Цифровые товары с быстрой доставкой.\n"
+        f"Владелец: {OWNER_USERNAME}",
+        reply_markup=kb
+    )
+
+
+AWAITING_DONATE_AMOUNT = set()
+
+@dp.callback_query(F.data == "donate")
+async def callback_donate(callback: types.CallbackQuery):
+    if not await require_sub(callback.message): return
+    await callback.message.answer(
+        "☕️ <b>Поддержать магазин</b>\n\n"
+        "Введите сумму в рублях (₽), которую хотите отправить.\n"
+        "Это добровольный донат владельцу.\n\n"
+        "Например: <code>100</code>"
+    )
+    AWAITING_DONATE_AMOUNT.add(callback.from_user.id)
+    await callback.answer()
+
+
 @dp.message(F.text == "🛍 Каталог")
 async def reply_catalog(message: types.Message):
     if not await require_sub(message): return
@@ -192,6 +227,41 @@ async def prompt_deposit(msg: types.Message):
 async def handle_numeric(message: types.Message):
     if not await require_sub(message): return
     uid = message.from_user.id
+
+    if uid in AWAITING_DONATE_AMOUNT:
+        AWAITING_DONATE_AMOUNT.discard(uid)
+        amount_rub = float(message.text.replace(",", "."))
+        if amount_rub < 10:
+            await message.answer("❌ Минимальный донат — 10₽")
+            return
+        await message.answer("⏳ Получаю курс USDT...")
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    "https://api.coingecko.com/api/v3/simple/price",
+                    params={"ids": "tether", "vs_currencies": "rub"}
+                )
+                price_data = r.json()
+                usdt_rate = price_data.get("tether", {}).get("rub", 90)
+        except:
+            usdt_rate = 90
+        amount_usdt = round(amount_rub / usdt_rate, 2)
+        try:
+            inv = await cryptopay.create_invoice("USDT", amount_usdt, f"Донат KILLStest {amount_rub}₽")
+            if inv and inv.get("ok"):
+                await message.answer(
+                    f"☕️ <b>Спасибо за поддержку!</b>\n\n"
+                    f"Сумма: <b>{amount_rub:.2f}₽</b>\n"
+                    f"К оплате: <b>{amount_usdt} USDT</b>\n\n"
+                    f"Ссылка для оплаты:\n"
+                    f"{inv['result']['pay_url']}"
+                )
+            else:
+                err = inv.get("error") if inv else "Нет ответа от Crypto Bot"
+                await message.answer(f"❌ Crypto Bot: {err}")
+        except Exception as e:
+            await message.answer(f"❌ Ошибка: {e}")
+        return
 
     if uid in AWAITING_DEPOSIT_AMOUNT:
         AWAITING_DEPOSIT_AMOUNT.discard(uid)
