@@ -4,6 +4,7 @@ from config import DATABASE_PATH
 
 async def init_db():
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -216,21 +217,23 @@ async def add_promo_code(code, discount_percent, max_uses=-1):
 # ── Referral ──
 
 async def get_or_create_ref(user_id):
+    import secrets, string
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM referrals WHERE user_id = ?", (user_id,)) as cur:
-            row = await cur.fetchone()
-            if row:
-                return dict(row)
-        import secrets, string
+        try:
+            async with db.execute("SELECT * FROM referrals WHERE user_id = ?", (user_id,)) as cur:
+                row = await cur.fetchone()
+                if row:
+                    return {"id": row[0], "user_id": row[1], "ref_code": row[2], "earned": float(row[3] or 0)}
+        except:
+            pass
         code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-        await db.execute("INSERT OR IGNORE INTO referrals (user_id, ref_code) VALUES (?, ?)", (user_id, code))
-        await db.commit()
-        async with db.execute("SELECT * FROM referrals WHERE user_id = ?", (user_id,)) as cur:
-            row = await cur.fetchone()
-            if row:
-                return dict(row)
-            return {"id": 0, "user_id": user_id, "ref_code": code, "earned": 0}
+        try:
+            await db.execute("INSERT INTO referrals (user_id, ref_code) VALUES (?, ?)", (user_id, code))
+            await db.commit()
+        except:
+            pass
+    return {"id": 0, "user_id": user_id, "ref_code": code, "earned": 0}
 
 
 async def apply_ref(code, used_by, order_id):
@@ -327,7 +330,10 @@ async def get_user(user_id):
         await db.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
         await db.commit()
         async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cur:
-            return dict(await cur.fetchone())
+            row = await cur.fetchone()
+            if row:
+                return dict(row)
+    return {"id": user_id, "username": None, "first_name": None, "balance": 0, "total_spent": 0, "registered_at": ""}
 
 
 async def add_balance(user_id, amount):

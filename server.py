@@ -20,6 +20,7 @@ CRYPTO_BOT_TOKEN = os.getenv("CRYPTO_BOT_TOKEN")
 
 def init_db():
     conn = sqlite3.connect(DATABASE_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
