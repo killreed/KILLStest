@@ -192,14 +192,13 @@ async def reply_catalog(message: types.Message):
 async def reply_my_orders(message: types.Message):
     orders = await db.get_user_orders(message.from_user.id)
     if not orders:
-        await message.answer("📦 <b>Ваши покупки</b>\n\nУ вас пока нет заказов.",
-                             reply_markup=main_menu_keyboard())
+        await message.answer("📦 <b>Ваши покупки</b>\n\nУ вас пока нет заказов.")
         return
     text = "📦 <b>Ваши покупки:</b>\n\n"
     for order in orders[:10]:
         emoji = "✅" if order["status"] == "completed" else "⏳"
         text += f"{emoji} #{order['id']} - {order['product_name']} ({order['amount']} {CURRENCY})\n"
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text)
 
 
 @dp.message(F.text == "ℹ️ Помощь")
@@ -210,8 +209,7 @@ async def reply_help(message: types.Message):
         "2️⃣ Оплатите криптовалютой USDT TRC20\n"
         "3️⃣ Отправьте хеш транзакции\n"
         "4️⃣ Получите товар\n\n"
-        "💬 Поддержка: @accounts22",
-        reply_markup=main_menu_keyboard()
+        "💬 Поддержка: @accounts22"
     )
 
 
@@ -225,8 +223,7 @@ async def reply_profile(message: types.Message):
         f"ID: <code>{message.from_user.id}</code>\n"
         f"Username: @{message.from_user.username or 'не указан'}\n"
         f"Всего заказов: {total}\n"
-        f"Выполнено: {completed}",
-        reply_markup=main_menu_keyboard()
+        f"Выполнено: {completed}"
     )
 
 
