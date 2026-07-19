@@ -232,7 +232,10 @@ async def handle_numeric(message: types.Message):
     if not await require_sub(message): return
     uid = message.from_user.id
 
-    if uid in AWAITING_ADMIN_MAILING or uid in AWAITING_ADMIN_NEW_CAT or uid in AWAITING_ADMIN_NEW_PROD:
+    if uid in AWAITING_ADMIN_MAILING:
+        await handle_mailing(message)
+        return
+    if uid in AWAITING_ADMIN_NEW_CAT or uid in AWAITING_ADMIN_NEW_PROD:
         return
 
     if uid in AWAITING_DONATE_AMOUNT:
