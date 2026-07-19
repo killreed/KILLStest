@@ -1,2 +1,6 @@
 flask==3.1.1
 python-dotenv==1.1.0
+httpx
+aiogram>=3.10.0
+aiosqlite>=0.20.0
+aiohttp>=3.10.0
