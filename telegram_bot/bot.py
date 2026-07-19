@@ -52,6 +52,19 @@ async def cmd_start(message: types.Message):
         message.from_user.username,
         message.from_user.first_name,
     )
+
+    ref_code = None
+    if message.text and "ref_" in message.text:
+        parts = message.text.split("ref_")
+        if len(parts) > 1:
+            ref_code = parts[1].strip()
+
+    if ref_code:
+        await db.apply_ref(ref_code, message.from_user.id, 0)
+        await message.answer(
+            "🎉 Вас пригласили! Сделайте первый заказ и получите скидку."
+        )
+
     await message.answer(
         "👋 <b>Добро пожаловать в KILLStest!</b>\n\n"
         "Я бот для продажи цифровых товаров.\n"
@@ -212,8 +225,8 @@ def reply_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛍 Каталог"), KeyboardButton(text="📦 Мои покупки")],
-            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="👤 Профиль")],
-            [KeyboardButton(text="Без кнопки никак")]
+            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="🔗 Рефералы")],
+            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="Без кнопки никак")]
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -239,6 +252,19 @@ async def reply_my_orders(message: types.Message):
     await message.answer(text)
 
 
+@dp.message(F.text == "🔗 Рефералы")
+async def reply_ref(message: types.Message):
+    ref = await db.get_or_create_ref(message.from_user.id)
+    bot_username = (await bot.me()).username
+    await message.answer(
+        f"🔗 <b>Реферальная программа</b>\n\n"
+        f"Приглашай друзей и получай 5% от их покупок!\n\n"
+        f"Твоя ссылка:\n"
+        f"<code>https://t.me/{bot_username}?start=ref_{ref['ref_code']}</code>\n\n"
+        f"💵 Заработано: {ref['earned']} {CURRENCY}"
+    )
+
+
 @dp.message(F.text == "ℹ️ Помощь")
 async def reply_help(message: types.Message):
     await message.answer(
@@ -256,13 +282,57 @@ async def reply_profile(message: types.Message):
     orders = await db.get_user_orders(message.from_user.id)
     completed = len([o for o in orders if o["status"] == "completed"])
     total = len(orders)
+    ref = await db.get_or_create_ref(message.from_user.id)
+    bot_username = (await bot.me()).username
     await message.answer(
         f"👤 <b>Профиль</b>\n\n"
         f"ID: <code>{message.from_user.id}</code>\n"
         f"Username: @{message.from_user.username or 'не указан'}\n"
-        f"Всего заказов: {total}\n"
-        f"Выполнено: {completed}"
+        f"Заказов: {total} | Выполнено: {completed}\n\n"
+        f"🔗 <b>Реферальная ссылка:</b>\n"
+        f"<code>https://t.me/{bot_username}?start=ref_{ref['ref_code']}</code>\n"
+        f"💵 Заработано с рефералов: {ref['earned']} {CURRENCY}"
     )
+
+
+@dp.message(Command("ref"))
+async def cmd_ref(message: types.Message):
+    ref = await db.get_or_create_ref(message.from_user.id)
+    bot_username = (await bot.me()).username
+    await message.answer(
+        f"🔗 <b>Твоя реферальная ссылка:</b>\n\n"
+        f"<code>https://t.me/{bot_username}?start=ref_{ref['ref_code']}</code>\n\n"
+        f"👥 Приглашай друзей — получай 5% от их покупок!\n"
+        f"💵 Заработано: {ref['earned']} {CURRENCY}"
+    )
+
+
+@dp.message(Command("mailing"))
+async def cmd_mailing(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Доступ запрещён.")
+        return
+    await message.answer(
+        "📨 <b>Рассылка</b>\n\n"
+        "Отправь сообщение, которое хочешь разослать всем пользователям.\n"
+        "Поддерживается HTML-разметка."
+    )
+    dp.message.register(handle_mailing, F.text)
+
+
+async def handle_mailing(message: types.Message):
+    users = await db.get_all_users()
+    sent = 0
+    failed = 0
+    await message.answer(f"📨 Начинаю рассылку {len(users)} пользователям...")
+    for u in users:
+        try:
+            await bot.send_message(u["user_id"], message.text, parse_mode=ParseMode.HTML)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except:
+            failed += 1
+    await message.answer(f"✅ Рассылка завершена!\nОтправлено: {sent}\nОшибок: {failed}")
 
 
 @dp.message(F.text == "Без кнопки никак")

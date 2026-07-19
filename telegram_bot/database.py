@@ -42,6 +42,26 @@ async def init_db():
             )
         """)
 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS referrals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                ref_code TEXT UNIQUE NOT NULL,
+                earned REAL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS referrals_used (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref_code TEXT NOT NULL,
+                used_by INTEGER NOT NULL,
+                order_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         await db.commit()
 
 
@@ -170,6 +190,44 @@ async def add_promo_code(code, discount_percent, max_uses=-1):
             return True
         except aiosqlite.IntegrityError:
             return False
+
+
+# ── Referral ──
+
+async def get_or_create_ref(user_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("SELECT * FROM referrals WHERE user_id = ?", (user_id,)) as cur:
+            row = await cur.fetchone()
+            if row:
+                return dict(row)
+        import secrets, string
+        code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+        await db.execute("INSERT INTO referrals (user_id, ref_code) VALUES (?, ?)", (user_id, code))
+        await db.commit()
+        async with db.execute("SELECT * FROM referrals WHERE user_id = ?", (user_id,)) as cur:
+            return dict(await cur.fetchone())
+
+
+async def apply_ref(code, used_by, order_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("SELECT * FROM referrals WHERE ref_code = ?", (code,)) as cur:
+            ref = await cur.fetchone()
+            if not ref:
+                return False
+        await db.execute(
+            "INSERT INTO referrals_used (ref_code, used_by, order_id) VALUES (?, ?, ?)",
+            (code, used_by, order_id)
+        )
+        await db.commit()
+        return True
+
+
+async def get_all_users():
+    """Возвращает всех пользователей, которые когда-либо писали боту."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT DISTINCT user_id, username FROM orders") as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
 
 async def check_promo_code(code):

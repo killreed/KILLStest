@@ -128,6 +128,7 @@
         <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">Статистика</button>
         <button class="tab active" data-tab="products" onclick="switchTab('products')">Товары</button>
         <button class="tab" data-tab="orders" onclick="switchTab('orders')">Заказы</button>
+        <button class="tab" data-tab="mailing" onclick="switchTab('mailing')">Рассылка</button>
     </div>
 
     <!-- Dashboard -->
@@ -170,6 +171,25 @@
                 </thead>
                 <tbody id="ordersBody"></tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Mailing -->
+    <div class="tab-content" id="tab-mailing">
+        <div class="section-header">
+            <h3>Рассылка</h3>
+        </div>
+        <div class="cards" style="margin-bottom:1.5rem">
+            <div class="card"><div class="label">Подписчиков</div><div class="val c1" id="mUsers">0</div><div class="sub">пользователей в базе</div></div>
+            <div class="card"><div class="label">Рефералов</div><div class="val c2" id="mRefs">0</div><div class="sub">всего ссылок</div></div>
+        </div>
+        <div class="table-wrap" style="margin-bottom:1rem">
+            <div style="padding:1.5rem">
+                <label style="font-size:0.85rem;color:var(--dim);display:block;margin-bottom:0.5rem">Текст рассылки (поддерживает HTML)</label>
+                <textarea id="mailText" style="width:100%;padding:0.8rem;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);font-size:0.9rem;outline:none;font-family:inherit;min-height:120px;resize:vertical" placeholder="Введите текст рассылки..."></textarea>
+                <button class="add-btn" onclick="sendMailing()" style="margin-top:1rem">📨 Отправить рассылку</button>
+                <div id="mailStatus" style="margin-top:0.8rem;font-size:0.85rem;color:var(--dim)"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -264,6 +284,7 @@
         document.getElementById('tab-' + name).classList.add('active');
         if(name === 'products') loadProductsTable();
         if(name === 'orders') loadOrdersTable();
+        if(name === 'mailing') loadMailingStats();
     }
 
     // Refresh
@@ -443,6 +464,52 @@
             .catch(function(){
                 alert('Ошибка обновления статуса');
             });
+    }
+
+    // Mailing
+    function loadMailingStats(){
+        api('/api/admin/users', 'GET').then(function(users){
+            document.getElementById('mUsers').textContent = users.length || 0;
+        }).catch(function(){});
+        api('/api/admin/stats/referrals', 'GET').then(function(s){
+            document.getElementById('mRefs').textContent = s.total_refs || 0;
+        }).catch(function(){});
+    }
+
+    function sendMailing(){
+        var text = document.getElementById('mailText').value.trim();
+        if(!text){ alert('Введите текст рассылки'); return; }
+        var btn = document.querySelector('#tab-mailing .add-btn');
+        btn.disabled = true;
+        btn.textContent = 'Отправка...';
+        document.getElementById('mailStatus').innerHTML = '⏳ Отправка...';
+
+        api('/api/admin/users', 'GET').then(function(users){
+            var sent = 0, failed = 0;
+            function sendNext(i){
+                if(i >= users.length){
+                    document.getElementById('mailStatus').innerHTML = '✅ Отправлено: ' + sent + ', Ошибок: ' + failed;
+                    btn.disabled = false;
+                    btn.textContent = '📨 Отправить рассылку';
+                    return;
+                }
+                fetch('/api/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: users[i].user_id, text: text })
+                }).then(function(r){
+                    if(r.ok) sent++; else failed++;
+                }).catch(function(){ failed++; })
+                .then(function(){
+                    setTimeout(function(){ sendNext(i+1); }, 100);
+                });
+            }
+            sendNext(0);
+        }).catch(function(){
+            document.getElementById('mailStatus').innerHTML = '❌ Ошибка загрузки пользователей';
+            btn.disabled = false;
+            btn.textContent = '📨 Отправить рассылку';
+        });
     }
 
     // Modal close on overlay click

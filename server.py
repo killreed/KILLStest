@@ -191,6 +191,49 @@ def admin_update_order_status(order_id):
     return jsonify({'success': True})
 
 
+# ── Send message (for mailing) ──
+
+@app.route('/api/send-message', methods=['POST'])
+def send_message():
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    text = data.get('text', '')
+    if not user_id or not text:
+        return jsonify({'error': 'Missing params'}), 400
+    try:
+        from telegram_bot.bot import bot as tg_bot
+        import asyncio
+        new_loop = asyncio.new_event_loop()
+        new_loop.run_until_complete(tg_bot.send_message(user_id, text, parse_mode='HTML'))
+        new_loop.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Admin Mailing ──
+
+@app.route('/api/admin/users', methods=['GET'])
+@login_required
+def admin_users():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT user_id, username FROM orders UNION SELECT id as user_id, username FROM users"
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route('/api/admin/stats/referrals', methods=['GET'])
+@login_required
+def admin_ref_stats():
+    conn = get_db()
+    total_refs = conn.execute("SELECT COUNT(*) FROM referrals").fetchone()[0]
+    total_used = conn.execute("SELECT COUNT(*) FROM referrals_used").fetchone()[0]
+    conn.close()
+    return jsonify({'total_refs': total_refs, 'total_used': total_used})
+
+
 # ── Admin Products CRUD ──
 
 @app.route('/api/admin/products', methods=['GET'])
