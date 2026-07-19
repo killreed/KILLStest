@@ -127,8 +127,11 @@
     <div class="tabs">
         <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">Статистика</button>
         <button class="tab active" data-tab="products" onclick="switchTab('products')">Товары</button>
+        <button class="tab" data-tab="categories" onclick="switchTab('categories')">Категории</button>
         <button class="tab" data-tab="orders" onclick="switchTab('orders')">Заказы</button>
         <button class="tab" data-tab="mailing" onclick="switchTab('mailing')">Рассылка</button>
+        <button class="tab" data-tab="balance" onclick="switchTab('balance')">Выдать баланс</button>
+        <button class="tab" data-tab="settings" onclick="switchTab('settings')">Настройки</button>
     </div>
 
     <!-- Dashboard -->
@@ -138,14 +141,21 @@
             <div class="card"><div class="label">Заказов всего</div><div class="val c2" id="sTotalOrders">0</div><div class="sub">за всё время</div></div>
             <div class="card"><div class="label">Ожидают</div><div class="val c3" id="sPending">0</div><div class="sub">новых заказов</div></div>
             <div class="card"><div class="label">Выполнено</div><div class="val c4" id="sCompleted">0</div><div class="sub">успешных</div></div>
-            <div class="card"><div class="label">Выручка</div><div class="val c5" id="sRevenue">0</div><div class="sub">USDT</div></div>
+            <div class="card"><div class="label">Выручка</div><div class="val c5" id="sRevenue">0</div><div class="sub">₽</div></div>
             <div class="card"><div class="label">Покупателей</div><div class="val c6" id="sBuyers">0</div><div class="sub">уникальных</div></div>
         </div>
+        <div class="cards" style="margin-top:1.5rem">
+            <div class="card"><div class="label">Пользователей</div><div class="val c2" id="sUsers">0</div><div class="sub">в боте</div></div>
+            <div class="card"><div class="label">Балансов (всего)</div><div class="val c3" id="sTotalBal">0</div><div class="sub">₽ на счетах</div></div>
+            <div class="card"><div class="label">Рефералов</div><div class="val c4" id="sRefs">0</div><div class="sub">всего ссылок</div></div>
+        </div>
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:1.5rem">
-            <button class="add-btn" onclick="switchTab('products');openProductModal()">+ Добавить товар</button>
+            <button class="add-btn" onclick="switchTab('products');setTimeout(openProductModal,100)">+ Добавить товар</button>
+            <button class="add-btn" onclick="switchTab('categories')">📂 Категории</button>
             <button class="add-btn" onclick="switchTab('mailing')">📨 Рассылка</button>
+            <button class="add-btn" onclick="switchTab('balance')">💳 Выдать баланс</button>
             <button class="add-btn" onclick="switchTab('orders')">📦 Заказы</button>
-            <button class="add-btn" onclick="refreshAll()">🔄 Обновить статистику</button>
+            <button class="add-btn" onclick="refreshAll()">🔄 Обновить</button>
         </div>
     </div>
 
@@ -165,6 +175,20 @@
         </div>
     </div>
 
+    <!-- Categories -->
+    <div class="tab-content" id="tab-categories">
+        <div class="section-header">
+            <h3>Категории товаров</h3>
+            <button class="add-btn" onclick="addCategory()">+ Добавить категорию</button>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Название</th><th>Товаров</th><th></th></tr></thead>
+                <tbody id="categoriesBody"></tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Orders -->
     <div class="tab-content" id="tab-orders">
         <div class="section-header">
@@ -173,7 +197,7 @@
         <div class="table-wrap">
             <table>
                 <thead>
-                    <tr><th>ID</th><th>Товар</th><th>Пользователь</th><th>Сумма</th><th>TX Hash</th><th>Статус</th><th>Дата</th><th></th></tr>
+                    <tr><th>ID</th><th>Товар</th><th>Пользователь</th><th>Сумма</th><th>Статус</th><th>Дата</th><th></th></tr>
                 </thead>
                 <tbody id="ordersBody"></tbody>
             </table>
@@ -196,6 +220,43 @@
                 <button class="add-btn" onclick="sendMailing()" style="margin-top:1rem">📨 Отправить рассылку</button>
                 <div id="mailStatus" style="margin-top:0.8rem;font-size:0.85rem;color:var(--dim)"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Balance -->
+    <div class="tab-content" id="tab-balance">
+        <div class="section-header">
+            <h3>Выдать баланс</h3>
+        </div>
+        <div class="table-wrap" style="padding:1.5rem">
+            <label style="font-size:0.85rem;color:var(--dim);display:block;margin-bottom:0.3rem">ID пользователя</label>
+            <input id="balUserId" style="width:100%;padding:0.7rem;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);font-size:0.9rem;outline:none;font-family:inherit;margin-bottom:1rem" placeholder="Например: 123456789">
+
+            <label style="font-size:0.85rem;color:var(--dim);display:block;margin-bottom:0.3rem">Сумма (₽)</label>
+            <input id="balAmount" type="number" style="width:100%;padding:0.7rem;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);font-size:0.9rem;outline:none;font-family:inherit;margin-bottom:1rem" placeholder="Например: 500">
+
+            <div style="display:flex;gap:0.75rem">
+                <button class="add-btn" onclick="giveBalance()">💳 Выдать</button>
+                <button class="add-btn" onclick="deductBalance()">❌ Списать</button>
+            </div>
+            <div id="balStatus" style="margin-top:0.8rem;font-size:0.85rem;color:var(--dim)"></div>
+        </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="tab-content" id="tab-settings">
+        <div class="section-header">
+            <h3>Настройки</h3>
+        </div>
+        <div class="table-wrap" style="padding:1.5rem">
+            <label style="font-size:0.85rem;color:var(--dim);display:block;margin-bottom:0.3rem">Канал для подписки</label>
+            <input id="setChannel" style="width:100%;padding:0.7rem;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);font-size:0.9rem;outline:none;font-family:inherit;margin-bottom:1rem" placeholder="@channel">
+
+            <label style="font-size:0.85rem;color:var(--dim);display:block;margin-bottom:0.3rem">Кошелёк USDT TRC20</label>
+            <input id="setWallet" style="width:100%;padding:0.7rem;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);font-size:0.9rem;outline:none;font-family:inherit;margin-bottom:1rem" placeholder="T...">
+
+            <button class="add-btn" onclick="saveSettings()">💾 Сохранить</button>
+            <div id="setStatus" style="margin-top:0.8rem;font-size:0.85rem;color:var(--dim)"></div>
         </div>
     </div>
 </div>
@@ -289,15 +350,20 @@
         document.querySelector('.tab[data-tab="' + name + '"]').classList.add('active');
         document.getElementById('tab-' + name).classList.add('active');
         if(name === 'products') loadProductsTable();
+        if(name === 'categories') loadCategories();
         if(name === 'orders') loadOrdersTable();
         if(name === 'mailing') loadMailingStats();
+        if(name === 'settings') loadSettings();
     }
 
     // Refresh
     function refreshAll(){
         loadStats();
-        if(document.getElementById('tab-products').classList.contains('active')) loadProductsTable();
-        if(document.getElementById('tab-orders').classList.contains('active')) loadOrdersTable();
+        var active = document.querySelector('.tab-content.active');
+        if(active){
+            var id = active.id.replace('tab-', '');
+            switchTab(id);
+        }
     }
 
     // Stats
@@ -309,6 +375,9 @@
             document.getElementById('sCompleted').textContent = s.completed_orders;
             document.getElementById('sRevenue').textContent = s.total_revenue;
             document.getElementById('sBuyers').textContent = s.unique_buyers;
+            document.getElementById('sUsers').textContent = s.total_users || 0;
+            document.getElementById('sTotalBal').textContent = s.total_balance || 0;
+            document.getElementById('sRefs').textContent = s.total_refs || 0;
             document.getElementById('statusBadge').textContent = 'онлайн';
         }).catch(function(){});
     }
@@ -470,6 +539,77 @@
             .catch(function(){
                 alert('Ошибка обновления статуса');
             });
+    }
+
+    // Categories
+    function loadCategories(){
+        var tbody = document.getElementById('categoriesBody');
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Загрузка...</td></tr>';
+        api('/api/admin/categories', 'GET').then(function(cats){
+            if(!cats || !cats.length){
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Нет категорий</td></tr>';
+                return;
+            }
+            var html = '';
+            var counts = {};
+            api('/api/admin/products', 'GET').then(function(prods){
+                (prods || []).forEach(function(p){ counts[p.category] = (counts[p.category] || 0) + 1; });
+                cats.forEach(function(c){
+                    html += '<tr><td>' + c.name + '</td><td>' + (counts[c.name] || 0) + '</td><td><button class="action-btn danger" onclick="deleteCategory(\'' + c.name + '\')">✕</button></td></tr>';
+                });
+                tbody.innerHTML = html;
+            }).catch(function(){ tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Ошибка</td></tr>'; });
+        }).catch(function(){ tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Ошибка</td></tr>'; });
+    }
+
+    function addCategory(){
+        var name = prompt('Название категории:');
+        if(!name || !name.trim()) return;
+        api('/api/admin/categories', 'POST', { name: name.trim() }).then(function(){
+            loadCategories();
+        }).catch(function(){ alert('Ошибка'); });
+    }
+
+    function deleteCategory(name){
+        if(!confirm('Удалить категорию "' + name + '"?')) return;
+        api('/api/admin/categories/' + encodeURIComponent(name), 'DELETE').then(function(){
+            loadCategories();
+        }).catch(function(){ alert('Ошибка'); });
+    }
+
+    // Balance
+    function giveBalance(){
+        var userId = document.getElementById('balUserId').value.trim();
+        var amount = parseFloat(document.getElementById('balAmount').value);
+        if(!userId || isNaN(amount) || amount <= 0){ alert('Введите ID и сумму'); return; }
+        api('/api/admin/balance', 'POST', { user_id: parseInt(userId), amount: amount, action: 'add' }).then(function(r){
+            document.getElementById('balStatus').innerHTML = '✅ Выдано ' + amount + '₽ пользователю ' + userId;
+        }).catch(function(){ document.getElementById('balStatus').innerHTML = '❌ Ошибка'; });
+    }
+
+    function deductBalance(){
+        var userId = document.getElementById('balUserId').value.trim();
+        var amount = parseFloat(document.getElementById('balAmount').value);
+        if(!userId || isNaN(amount) || amount <= 0){ alert('Введите ID и сумму'); return; }
+        api('/api/admin/balance', 'POST', { user_id: parseInt(userId), amount: amount, action: 'deduct' }).then(function(r){
+            document.getElementById('balStatus').innerHTML = '✅ Списано ' + amount + '₽ у пользователя ' + userId;
+        }).catch(function(){ document.getElementById('balStatus').innerHTML = '❌ Ошибка'; });
+    }
+
+    // Settings
+    function loadSettings(){
+        api('/api/admin/settings', 'GET').then(function(s){
+            document.getElementById('setChannel').value = s.channel || '@testwwdnwd1212';
+            document.getElementById('setWallet').value = s.wallet || '';
+        }).catch(function(){});
+    }
+
+    function saveSettings(){
+        var channel = document.getElementById('setChannel').value.trim();
+        var wallet = document.getElementById('setWallet').value.trim();
+        api('/api/admin/settings', 'PUT', { channel: channel, wallet: wallet }).then(function(){
+            document.getElementById('setStatus').innerHTML = '✅ Сохранено';
+        }).catch(function(){ document.getElementById('setStatus').innerHTML = '❌ Ошибка'; });
     }
 
     // Mailing

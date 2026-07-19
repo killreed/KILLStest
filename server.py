@@ -47,8 +47,15 @@ def init_db():
             code TEXT UNIQUE NOT NULL,
             discount_percent INTEGER NOT NULL,
             max_uses INTEGER DEFAULT -1,
-            used_count INTEGER DEFAULT 0,
-            is_active INTEGER DEFAULT 1
+            used_count INTEGER DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            balance REAL DEFAULT 0,
+            total_spent REAL DEFAULT 0,
+            registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
     conn.commit()
@@ -160,6 +167,9 @@ def admin_stats():
         'completed_orders': conn.execute("SELECT COUNT(*) FROM orders WHERE status = 'completed'").fetchone()[0],
         'total_revenue': conn.execute("SELECT COALESCE(SUM(amount), 0) FROM orders WHERE status = 'completed'").fetchone()[0],
         'unique_buyers': conn.execute("SELECT COUNT(DISTINCT user_id) FROM orders").fetchone()[0],
+        'total_users': conn.execute("SELECT COUNT(*) FROM users").fetchone()[0],
+        'total_balance': conn.execute("SELECT COALESCE(SUM(balance), 0) FROM users").fetchone()[0],
+        'total_refs': conn.execute("SELECT COUNT(*) FROM referrals").fetchone()[0],
     }
     conn.close()
     return jsonify(stats)
@@ -275,6 +285,97 @@ def admin_ref_stats():
     total_used = conn.execute("SELECT COUNT(*) FROM referrals_used").fetchone()[0]
     conn.close()
     return jsonify({'total_refs': total_refs, 'total_used': total_used})
+
+
+# ── Admin Categories ──
+
+@app.route('/api/admin/categories', methods=['GET'])
+@login_required
+def admin_get_categories():
+    conn = get_db()
+    rows = conn.execute("SELECT DISTINCT category FROM products ORDER BY category").fetchall()
+    conn.close()
+    return jsonify([{'name': r['category']} for r in rows])
+
+
+@app.route('/api/admin/categories', methods=['POST'])
+@login_required
+def admin_add_category():
+    data = request.get_json(silent=True) or {}
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Имя обязательно'}), 400
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/categories/<path:name>', methods=['DELETE'])
+@login_required
+def admin_delete_category(name):
+    conn = get_db()
+    conn.execute("UPDATE products SET category = 'general' WHERE category = ?", (name,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# ── Admin Balance ──
+
+@app.route('/api/admin/balance', methods=['POST'])
+@login_required
+def admin_balance():
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    amount = float(data.get('amount', 0))
+    action = data.get('action', 'add')
+    if not user_id or amount <= 0:
+        return jsonify({'error': 'Invalid params'}), 400
+    conn = get_db()
+    conn.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
+    if action == 'add':
+        conn.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, user_id))
+    else:
+        conn.execute("UPDATE users SET balance = MAX(0, balance - ?) WHERE id = ?", (amount, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# ── Admin Settings ──
+
+@app.route('/api/admin/settings', methods=['GET'])
+@login_required
+def admin_get_settings():
+    return jsonify({
+        'channel': os.getenv('CHANNEL_USERNAME', '@testwwdnwd1212'),
+        'wallet': os.getenv('WALLET_ADDRESS', ''),
+    })
+
+
+@app.route('/api/admin/settings', methods=['PUT'])
+@login_required
+def admin_save_settings():
+    data = request.get_json(silent=True) or {}
+    channel = data.get('channel', '')
+    wallet = data.get('wallet', '')
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    try:
+        with open(env_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        new_lines = []
+        for line in lines:
+            if line.startswith('CHANNEL_USERNAME='):
+                new_lines.append(f'CHANNEL_USERNAME={channel}\n')
+            elif line.startswith('WALLET_ADDRESS='):
+                new_lines.append(f'WALLET_ADDRESS={wallet}\n')
+            else:
+                new_lines.append(line)
+        with open(env_path, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+        os.environ['CHANNEL_USERNAME'] = channel
+        os.environ['WALLET_ADDRESS'] = wallet
+    except:
+        pass
+    return jsonify({'success': True})
 
 
 # ── Admin Products CRUD ──
