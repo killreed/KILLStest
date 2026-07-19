@@ -523,22 +523,133 @@ async def handle_mailing(message: types.Message):
     await message.answer(f"✅ Рассылка завершена!\nОтправлено: {sent}\nОшибок: {failed}")
 
 
+AWAITING_ADMIN_BALANCE = {}
+AWAITING_ADMIN_SETTING = {}
+
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message):
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Доступ запрещён.")
         return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
+         InlineKeyboardButton(text="📦 Товары", callback_data="admin_products")],
+        [InlineKeyboardButton(text="📂 Категории", callback_data="admin_cats"),
+         InlineKeyboardButton(text="📨 Рассылка", callback_data="admin_mailing")],
+        [InlineKeyboardButton(text="💳 Выдать баланс", callback_data="admin_balance"),
+         InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_settings")]
+    ])
+    await message.answer("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=kb)
+
+
+@dp.callback_query(F.data == "admin_stats")
+async def admin_cb_stats(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
     stats = await db.get_stats()
+    users = await db.get_all_db_users()
+    total_bal = sum(u["balance"] for u in users)
     text = (
-        f"📊 <b>Статистика магазина</b>\n\n"
+        f"📊 <b>Статистика</b>\n\n"
         f"📦 Товаров: {stats['products']}\n"
         f"🛒 Заказов всего: {stats['total_orders']}\n"
         f"⏳ Ожидают: {stats['pending_orders']}\n"
         f"✅ Выполнено: {stats['completed_orders']}\n"
         f"💰 Выручка: {stats['total_revenue']:.2f}₽\n"
-        f"👥 Покупателей: {stats['unique_buyers']}"
+        f"👥 Покупателей: {stats['unique_buyers']}\n"
+        f"👤 Пользователей: {len(users)}\n"
+        f"💵 Балансов всего: {total_bal:.2f}₽"
     )
-    await message.answer(text)
+    await callback.message.edit_text(text)
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_products")
+async def admin_cb_products(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    products = await db.get_products(active_only=False)
+    if not products:
+        await callback.message.edit_text("📦 Нет товаров.")
+        return await callback.answer()
+    text = "📦 <b>Товары</b>\n\n"
+    for p in products:
+        status = "✅" if p["is_active"] else "❌"
+        text += f"{status} #{p['id']} {p['name']} — {p['price']}₽\n"
+    await callback.message.edit_text(text)
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_cats")
+async def admin_cb_cats(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    conn = sqlite3.connect(db.DATABASE_PATH)
+    rows = conn.execute("SELECT DISTINCT category FROM products ORDER BY category").fetchall()
+    conn.close()
+    if not rows:
+        await callback.message.edit_text("📂 Нет категорий.")
+        return await callback.answer()
+    text = "📂 <b>Категории</b>\n\n" + "\n".join(f"• {r[0]}" for r in rows)
+    await callback.message.edit_text(text)
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_mailing")
+async def admin_cb_mailing(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    await callback.message.edit_text(
+        "📨 <b>Рассылка</b>\n\nОтправь сообщение, которое хочешь разослать всем.\nПоддерживается HTML."
+    )
+    dp.message.register(handle_mailing, F.text)
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_balance")
+async def admin_cb_balance(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    await callback.message.edit_text(
+        "💳 <b>Выдать баланс</b>\n\nНапиши:\n<code>ID СУММА</code>\nНапример: <code>123456789 500</code>"
+    )
+    AWAITING_ADMIN_BALANCE[callback.from_user.id] = True
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_settings")
+async def admin_cb_settings(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    await callback.message.edit_text(
+        "⚙️ <b>Настройки</b>\n\nНапиши:\n<code>CHANNEL_USERNAME=@channel</code>\n<code>WALLET_ADDRESS=T...</code>"
+    )
+    AWAITING_ADMIN_SETTING[callback.from_user.id] = True
+    await callback.answer()
+
+
+# ── Admin: выдать баланс ──
+
+@dp.message(F.text.regexp(r'^\d+\s+\d+([.,]\d+)?$'))
+async def admin_balance_input(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS or message.from_user.id not in AWAITING_ADMIN_BALANCE:
+        return
+    AWAITING_ADMIN_BALANCE.pop(message.from_user.id, None)
+    parts = message.text.split()
+    uid = int(parts[0])
+    amount = float(parts[1].replace(",", "."))
+    conn = sqlite3.connect(db.DATABASE_PATH)
+    conn.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (uid,))
+    conn.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, uid))
+    conn.commit()
+    conn.close()
+    await message.answer(f"✅ Выдано {amount:.2f}₽ пользователю {uid}")
+
+
+# ── Admin: настройки ──
+
+@dp.message(F.text.regexp(r'^(CHANNEL_USERNAME|WALLET_ADDRESS)=.+'))
+async def admin_settings_input(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS or message.from_user.id not in AWAITING_ADMIN_SETTING:
+        return
+    AWAITING_ADMIN_SETTING.pop(message.from_user.id, None)
+    key, value = message.text.split("=", 1)
+    os.environ[key] = value
+    await message.answer(f"✅ {key} обновлён на {value}")
 
 
 # ── Обработчик остальных сообщений ──
