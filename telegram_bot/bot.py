@@ -418,14 +418,16 @@ async def main():
 
     port = int(os.getenv("PORT", 10000))
 
-    async def healthcheck():
-        handler = await asyncio.start_server(
-            lambda r, w: None, host="0.0.0.0", port=port
-        )
-        async with handler:
-            await handler.serve_forever()
+    from aiohttp import web
+    async def healthcheck(request):
+        return web.Response(text="ok")
+    app = web.Application()
+    app.router.add_get("/", healthcheck)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    asyncio.create_task(site.start())
 
-    asyncio.create_task(healthcheck())
     await dp.start_polling(bot, skip_updates=True)
 
 
