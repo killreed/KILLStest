@@ -562,10 +562,11 @@ async def text_admin(message: types.Message):
 
 
 async def admin_main_menu(callback_or_msg):
+    text = "🔧 <b>Админ-панель</b>\n\nВыберите действие:"
     if hasattr(callback_or_msg, "edit_text"):
-        await callback_or_msg.edit_text("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=ADMIN_MENU_KB)
+        await callback_or_msg.edit_text(text, reply_markup=ADMIN_MENU_KB, parse_mode=ParseMode.HTML)
     else:
-        await callback_or_msg.answer("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=ADMIN_MENU_KB)
+        await callback_or_msg.answer(text, reply_markup=ADMIN_MENU_KB, parse_mode=ParseMode.HTML)
 
 
 @dp.callback_query(F.data == "back_main")
