@@ -1,5 +1,7 @@
 ﻿import asyncio
+import logging
 import os
+import sqlite3
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
@@ -9,14 +11,49 @@ from aiogram.client.session.aiohttp import AiohttpSession
 import database as db
 from config import BOT_TOKEN, ADMIN_IDS, WALLET_ADDRESS, CURRENCY, PROXY
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+STICKER_ID = "CAACAgIAAxkBAAEBI3tqEE0wy1Kf_YJwOB5OomVOWxsDvAACc4QAAolZUUqfxgrLunneZDsE"
 
 session = AiohttpSession(proxy=PROXY) if PROXY else None
 bot = Bot(token=BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
+# ── Users DB ──
+
+def init_users_db() -> None:
+    with sqlite3.connect("bot.db") as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id         INTEGER PRIMARY KEY,
+                username   TEXT,
+                first_name TEXT,
+                joined_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+
+def upsert_user(user_id: int, username: str | None, first_name: str | None) -> None:
+    with sqlite3.connect("bot.db") as conn:
+        conn.execute("""
+            INSERT INTO users (id, username, first_name)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                username   = excluded.username,
+                first_name = excluded.first_name
+        """, (user_id, username, first_name))
+        conn.commit()
+
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
+    upsert_user(
+        message.from_user.id,
+        message.from_user.username,
+        message.from_user.first_name,
+    )
     await message.answer(
         "👋 <b>Добро пожаловать в KILLStest!</b>\n\n"
         "Я бот для продажи цифровых товаров.\n"
@@ -177,9 +214,12 @@ def reply_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛍 Каталог"), KeyboardButton(text="📦 Мои покупки")],
-            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="👤 Профиль")]
+            [KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="👤 Профиль")],
+            [KeyboardButton(text="Без кнопки никак")]
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Выберите действие..."
     )
 
 
@@ -225,6 +265,11 @@ async def reply_profile(message: types.Message):
         f"Всего заказов: {total}\n"
         f"Выполнено: {completed}"
     )
+
+
+@dp.message(F.text == "Без кнопки никак")
+async def btn_no_choice(message: types.Message) -> None:
+    await message.answer_sticker(STICKER_ID)
 
 
 @dp.message(Command("admin"))
@@ -364,8 +409,12 @@ async def my_orders(callback: types.CallbackQuery):
 
 
 async def main():
+    if not BOT_TOKEN:
+        raise ValueError("Переменная BOT_TOKEN не найдена в .env")
+
     await db.init_db()
-    print("Бот запущен!")
+    init_users_db()
+    logger.info("Бот запущен!")
 
     port = int(os.getenv("PORT", 10000))
 
@@ -377,7 +426,7 @@ async def main():
             await handler.serve_forever()
 
     asyncio.create_task(healthcheck())
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, skip_updates=True)
 
 
 if __name__ == "__main__":
