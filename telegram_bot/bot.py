@@ -128,9 +128,8 @@ async def require_sub(message: types.Message) -> bool:
 @dp.message(F.text == "ℹ️ О магазине")
 async def reply_about(message: types.Message):
     if not await require_sub(message): return
-    bot_username = (await bot.me()).username
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Наш бот", url=f"https://t.me/{bot_username}")],
+        [InlineKeyboardButton(text="📢 Наш канал", url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}")],
         [InlineKeyboardButton(text="☕️ Кинуть на чай", callback_data="donate")],
         [InlineKeyboardButton(text="👤 Владелец", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")]
     ])
