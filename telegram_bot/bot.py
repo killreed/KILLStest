@@ -406,7 +406,7 @@ async def my_orders(callback: types.CallbackQuery):
     await callback.answer()
 
 
-async def main():
+async def main(enable_healthcheck=True):
     if not BOT_TOKEN:
         raise ValueError("Переменная BOT_TOKEN не найдена в .env")
 
@@ -414,17 +414,17 @@ async def main():
     init_users_db()
     logger.info("Бот запущен!")
 
-    port = int(os.getenv("PORT", 10000))
-
-    from aiohttp import web
-    async def healthcheck(request):
-        return web.Response(text="ok")
-    app = web.Application()
-    app.router.add_get("/", healthcheck)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    asyncio.create_task(site.start())
+    if enable_healthcheck:
+        port = int(os.getenv("PORT", 10000))
+        from aiohttp import web
+        async def healthcheck(request):
+            return web.Response(text="ok")
+        web_app = web.Application()
+        web_app.router.add_get("/", healthcheck)
+        runner = web.AppRunner(web_app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", port)
+        asyncio.create_task(site.start())
 
     await dp.start_polling(bot, skip_updates=True)
 

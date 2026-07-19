@@ -258,7 +258,20 @@ def admin_delete_product(product_id):
 
 # ── Run ──
 
+def run_bot():
+    """Запускает Telegram бота в фоновом потоке (общая БД)."""
+    import asyncio
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from telegram_bot.bot import main as bot_main
+    asyncio.run(bot_main(enable_healthcheck=False))
+
+
 if __name__ == '__main__':
+    import threading
+    t = threading.Thread(target=run_bot, daemon=True)
+    t.start()
+
     port = int(os.getenv("PORT", 5000))
     debug = os.getenv("FLASK_DEBUG", "1") == "1"
     print(f"Сервер запущен на http://localhost:{port}")
