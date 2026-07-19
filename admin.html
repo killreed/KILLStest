@@ -141,6 +141,12 @@
             <div class="card"><div class="label">Выручка</div><div class="val c5" id="sRevenue">0</div><div class="sub">USDT</div></div>
             <div class="card"><div class="label">Покупателей</div><div class="val c6" id="sBuyers">0</div><div class="sub">уникальных</div></div>
         </div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:1.5rem">
+            <button class="add-btn" onclick="switchTab('products');openProductModal()">+ Добавить товар</button>
+            <button class="add-btn" onclick="switchTab('mailing')">📨 Рассылка</button>
+            <button class="add-btn" onclick="switchTab('orders')">📦 Заказы</button>
+            <button class="add-btn" onclick="refreshAll()">🔄 Обновить статистику</button>
+        </div>
     </div>
 
     <!-- Products -->
