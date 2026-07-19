@@ -526,11 +526,33 @@ async def handle_mailing(message: types.Message):
 
 AWAITING_ADMIN_BALANCE = {}
 AWAITING_ADMIN_SETTING = {}
+AWAITING_ADMIN_NEW_CAT = set()
+AWAITING_ADMIN_NEW_PROD = set()
+
+
+ADMIN_MENU_KB = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
+     InlineKeyboardButton(text="📦 Товары", callback_data="admin_products")],
+    [InlineKeyboardButton(text="📂 Категории", callback_data="admin_cats"),
+     InlineKeyboardButton(text="📨 Рассылка", callback_data="admin_mailing")],
+    [InlineKeyboardButton(text="💳 Выдать баланс", callback_data="admin_balance"),
+     InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_settings")],
+    [InlineKeyboardButton(text="◀️ Назад", callback_data="back_main")]
+])
+
+ADMIN_BACK = [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_back")]
 
 
 @dp.message(F.text == "админ")
 async def text_admin(message: types.Message):
     await cmd_admin(message)
+
+
+async def admin_main_menu(callback_or_msg):
+    if hasattr(callback_or_msg, "edit_text"):
+        await callback_or_msg.edit_text("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=ADMIN_MENU_KB)
+    else:
+        await callback_or_msg.answer("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=ADMIN_MENU_KB)
 
 
 @dp.callback_query(F.data == "back_main")
@@ -543,11 +565,21 @@ async def callback_back_main(callback: types.CallbackQuery):
     await callback.answer()
 
 
+@dp.callback_query(F.data == "admin_back")
+async def callback_admin_back(callback: types.CallbackQuery):
+    await admin_main_menu(callback)
+    await callback.answer()
+
+
 BK = [InlineKeyboardButton(text="◀️ Назад", callback_data="back_main")]
 
 
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Доступ запрещён.")
+        return
+    await message.answer("🔧 <b>Админ-панель</b>\n\nВыберите действие:", reply_markup=ADMIN_MENU_KB)
     if message.from_user.id not in ADMIN_IDS:
         await message.answer("⛔ Доступ запрещён.")
         return
@@ -580,7 +612,7 @@ async def admin_cb_stats(callback: types.CallbackQuery):
         f"👤 Пользователей: {len(users)}\n"
         f"💵 Балансов всего: {total_bal:.2f}₽"
     )
-    await callback.message.edit_text(text)
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[ADMIN_BACK]))
     await callback.answer()
 
 
@@ -588,14 +620,34 @@ async def admin_cb_stats(callback: types.CallbackQuery):
 async def admin_cb_products(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
     products = await db.get_products(active_only=False)
-    if not products:
-        await callback.message.edit_text("📦 Нет товаров.")
-        return await callback.answer()
-    text = "📦 <b>Товары</b>\n\n"
+    kb = []
     for p in products:
         status = "✅" if p["is_active"] else "❌"
-        text += f"{status} #{p['id']} {p['name']} — {p['price']}₽\n"
-    await callback.message.edit_text(text)
+        kb.append([InlineKeyboardButton(text=f"{status} #{p['id']} {p['name']} ({p['price']}₽)", callback_data=f"admin_delprod_{p['id']}")])
+    kb.append([InlineKeyboardButton(text="➕ Добавить товар", callback_data="admin_addprod")])
+    kb.append(ADMIN_BACK)
+    await callback.message.edit_text("📦 <b>Управление товарами</b>\n\nНажми на товар чтобы удалить:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_delprod_"))
+async def admin_cb_delprod(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    pid = int(callback.data.split("_")[2])
+    await db.delete_product(pid)
+    await callback.answer("🗑 Удалено", show_alert=True)
+    await admin_cb_products(callback)
+
+
+@dp.callback_query(F.data == "admin_addprod")
+async def admin_cb_addprod(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    await callback.message.edit_text(
+        "➕ <b>Добавить товар</b>\n\nНапиши в одну строку:\n"
+        "<code>Название | Цена | Категория</code>\n\n"
+        "Например:\n<code>Название товара | 500 | games</code>"
+    )
+    AWAITING_ADMIN_NEW_PROD.add(callback.from_user.id)
     await callback.answer()
 
 
@@ -605,11 +657,33 @@ async def admin_cb_cats(callback: types.CallbackQuery):
     conn = sqlite3.connect(db.DATABASE_PATH)
     rows = conn.execute("SELECT DISTINCT category FROM products ORDER BY category").fetchall()
     conn.close()
-    if not rows:
-        await callback.message.edit_text("📂 Нет категорий.")
-        return await callback.answer()
-    text = "📂 <b>Категории</b>\n\n" + "\n".join(f"• {r[0]}" for r in rows)
-    await callback.message.edit_text(text)
+    kb = []
+    for r in rows:
+        name = r[0]
+        kb.append([InlineKeyboardButton(text=f"✕ {name}", callback_data=f"admin_delcat_{name}")])
+    kb.append([InlineKeyboardButton(text="➕ Добавить категорию", callback_data="admin_addcat")])
+    kb.append(ADMIN_BACK)
+    await callback.message.edit_text("📂 <b>Управление категориями</b>\n\nНажми на категорию чтобы удалить:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_delcat_"))
+async def admin_cb_delcat(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    name = callback.data[len("admin_delcat_"):]
+    conn = sqlite3.connect(db.DATABASE_PATH)
+    conn.execute("UPDATE products SET category = 'general' WHERE category = ?", (name,))
+    conn.commit()
+    conn.close()
+    await callback.answer(f"🗑 Категория {name} удалена", show_alert=True)
+    await admin_cb_cats(callback)
+
+
+@dp.callback_query(F.data == "admin_addcat")
+async def admin_cb_addcat(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
+    await callback.message.edit_text("➕ <b>Добавить категорию</b>\n\nНапиши название категории:")
+    AWAITING_ADMIN_NEW_CAT.add(callback.from_user.id)
     await callback.answer()
 
 
@@ -617,7 +691,8 @@ async def admin_cb_cats(callback: types.CallbackQuery):
 async def admin_cb_mailing(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
     await callback.message.edit_text(
-        "📨 <b>Рассылка</b>\n\nОтправь сообщение, которое хочешь разослать всем.\nПоддерживается HTML."
+        "📨 <b>Рассылка</b>\n\nОтправь сообщение, которое хочешь разослать всем.\nПоддерживается HTML.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[ADMIN_BACK])
     )
     dp.message.register(handle_mailing, F.text)
     await callback.answer()
@@ -627,7 +702,8 @@ async def admin_cb_mailing(callback: types.CallbackQuery):
 async def admin_cb_balance(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
     await callback.message.edit_text(
-        "💳 <b>Выдать баланс</b>\n\nНапиши:\n<code>ID СУММА</code>\nНапример: <code>123456789 500</code>"
+        "💳 <b>Выдать баланс</b>\n\nНапиши:\n<code>ID СУММА</code>\nНапример: <code>123456789 500</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[ADMIN_BACK])
     )
     AWAITING_ADMIN_BALANCE[callback.from_user.id] = True
     await callback.answer()
@@ -637,10 +713,51 @@ async def admin_cb_balance(callback: types.CallbackQuery):
 async def admin_cb_settings(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS: return await callback.answer("⛔", show_alert=True)
     await callback.message.edit_text(
-        "⚙️ <b>Настройки</b>\n\nНапиши:\n<code>CHANNEL_USERNAME=@channel</code>\n<code>WALLET_ADDRESS=T...</code>"
+        "⚙️ <b>Настройки</b>\n\nНапиши:\n<code>CHANNEL_USERNAME=@channel</code>\n<code>WALLET_ADDRESS=T...</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[ADMIN_BACK])
     )
     AWAITING_ADMIN_SETTING[callback.from_user.id] = True
     await callback.answer()
+
+
+# ── Admin: добавить категорию ──
+
+@dp.message(F.text & ~F.text.contains("|") & ~F.text.startswith("/") & F.text.len() <= 30)
+async def admin_new_cat_input(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS or message.from_user.id not in AWAITING_ADMIN_NEW_CAT:
+        return
+    AWAITING_ADMIN_NEW_CAT.discard(message.from_user.id)
+    name = message.text.strip()
+    if not name:
+        return
+    conn = sqlite3.connect(db.DATABASE_PATH)
+    conn.execute("INSERT OR IGNORE INTO products (name, description, price, category) VALUES (?, '', 0, ?)",
+                 (f"_cat_placeholder_{name}", name))
+    conn.commit()
+    conn.close()
+    await message.answer(f"✅ Категория «{name}» добавлена!")
+
+
+# ── Admin: добавить товар ──
+
+@dp.message(F.text.contains("|"))
+async def admin_new_prod_input(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS or message.from_user.id not in AWAITING_ADMIN_NEW_PROD:
+        return
+    AWAITING_ADMIN_NEW_PROD.discard(message.from_user.id)
+    parts = [p.strip() for p in message.text.split("|")]
+    if len(parts) < 2:
+        await message.answer("❌ Формат: Название | Цена | Категория")
+        return
+    name = parts[0]
+    try:
+        price = float(parts[1].replace(",", "."))
+    except:
+        await message.answer("❌ Цена должна быть числом")
+        return
+    category = parts[2] if len(parts) > 2 else "general"
+    await db.add_product(name, "", price, category=category)
+    await message.answer(f"✅ Товар «{name}» добавлен за {price}₽ в категорию {category}")
 
 
 # ── Admin: выдать баланс ──
