@@ -217,6 +217,7 @@ async def add_promo_code(code, discount_percent, max_uses=-1):
 
 async def get_or_create_ref(user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM referrals WHERE user_id = ?", (user_id,)) as cur:
             row = await cur.fetchone()
             if row:
