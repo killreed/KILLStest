@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KILLStest — Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#0a0a0a;--surface:#111113;--surface2:#1a1a1e;--border:rgba(220,20,60,0.08);--text:#fafafa;--dim:rgba(255,255,255,0.5);--accent:#dc143c;--accent2:#ff4757;--green:#22c55e;--pink:#dc143c;--red:#ff1744;--yellow:#eab308;--glass-bg:rgba(220,20,60,0.1);--glass-border:rgba(220,20,60,0.2)}
+        body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+
+        /* Login */
+        .login-wrap{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200}
+        .login-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:3rem;width:90%;max-width:360px;text-align:center}
+        .login-box h2{font-size:1.4rem;font-weight:800;margin-bottom:0.3rem}
+        .login-box p{color:var(--dim);font-size:0.85rem;margin-bottom:2rem}
+        .login-box input{width:100%;padding:0.8rem;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);font-size:1rem;text-align:center;outline:none;font-family:inherit}
+        .login-box input:focus{border-color:var(--accent)}
+        .login-box button{width:100%;margin-top:1rem;padding:0.8rem;border:1px solid var(--glass-border);border-radius:12px;background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 4px 24px rgba(220,20,60,0.12);color:white;font-size:0.95rem;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.2s,box-shadow 0.2s}
+        .login-box button:hover{opacity:0.9;box-shadow:0 8px 32px rgba(220,20,60,0.25)}
+        .login-err{color:var(--red);font-size:0.85rem;margin-top:0.8rem;display:none}
+
+        /* Layout */
+        .admin{display:none}
+        .admin-head{display:flex;align-items:center;justify-content:space-between;padding:2rem 2rem 0;flex-wrap:wrap;gap:1rem}
+        .admin-head h1{font-size:1.5rem;font-weight:800}
+        .admin-head h1 span{color:var(--accent)}
+        .admin-head .status{font-size:0.8rem;background:rgba(34,197,94,0.1);color:var(--green);padding:0.3rem 0.8rem;border-radius:6px}
+        .admin-btns{display:flex;gap:0.5rem;align-items:center}
+        .admin-btns button,.admin-btns a{padding:0.45rem 1rem;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 4px 16px rgba(220,20,60,0.08);color:var(--text);font-size:0.8rem;cursor:pointer;font-family:inherit;text-decoration:none;transition:border-color 0.2s,box-shadow 0.2s}
+        .admin-btns button:hover,.admin-btns a:hover{border-color:var(--accent);box-shadow:0 6px 24px rgba(220,20,60,0.15)}
+        .admin-btns .out{border-color:rgba(239,68,68,0.3);color:var(--red)}
+        .admin-btns .out:hover{background:rgba(239,68,68,0.05)}
+
+        /* Tabs */
+        .tabs{display:flex;gap:0;padding:2rem 2rem 0;border-bottom:1px solid var(--border)}
+        .tab{padding:0.7rem 1.5rem;font-size:0.85rem;font-weight:600;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;transition:color 0.2s,border-color 0.2s;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit}
+        .tab:hover{color:var(--text)}
+        .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+        .tab-content{display:none;padding:2rem}
+        .tab-content.active{display:block}
+
+        /* Stats cards */
+        .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1px;background:var(--border);border-radius:14px;overflow:hidden;margin-bottom:2.5rem}
+        .card{background:var(--surface);padding:1.5rem}
+        .card .label{font-size:0.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:0.8rem}
+        .card .val{font-size:2.2rem;font-weight:800;letter-spacing:-1px}
+        .card .val.c1{color:var(--green)}.card .val.c2{color:var(--accent2)}.card .val.c3{color:var(--accent)}.card .val.c4{color:var(--pink)}.card .val.c5{color:var(--yellow)}.card .val.c6{color:var(--red)}
+        .card .sub{font-size:0.75rem;color:var(--dim);margin-top:0.3rem}
+
+        /* Table */
+        .table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+        table{width:100%;border-collapse:collapse;font-size:0.85rem}
+        th,td{padding:0.8rem 1rem;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+        th{font-size:0.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:600}
+        tr:last-child td{border-bottom:none}
+        tr:hover td{background:rgba(255,255,255,0.02)}
+
+        .badge{padding:0.2rem 0.6rem;border-radius:6px;font-size:0.75rem;font-weight:600}
+        .badge.green{background:rgba(34,197,94,0.1);color:var(--green)}
+        .badge.yellow{background:rgba(234,179,8,0.1);color:var(--yellow)}
+        .badge.red{background:rgba(239,68,68,0.1);color:var(--red)}
+        .badge.blue{background:rgba(6,182,212,0.1);color:var(--accent2)}
+
+        .action-btn{padding:0.3rem 0.7rem;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--text);font-size:0.75rem;cursor:pointer;font-family:inherit;transition:border-color 0.2s,box-shadow 0.2s}
+        .action-btn:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(220,20,60,0.12)}
+        .action-btn.danger{color:var(--red)}
+        .action-btn.danger:hover{border-color:var(--red)}
+        .action-btn.green{color:var(--green)}
+        .action-btn.green:hover{border-color:var(--green)}
+
+        /* Modal */
+        .modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:1rem}
+        .modal-overlay.active{display:flex}
+        .modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:2rem;max-width:480px;width:100%}
+        .modal h2{font-size:1.2rem;font-weight:800;margin-bottom:1.5rem}
+        .modal label{display:block;font-size:0.8rem;color:var(--dim);margin-bottom:0.3rem;margin-top:1rem}
+        .modal input,.modal textarea,.modal select{width:100%;padding:0.7rem;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);font-size:0.9rem;outline:none;font-family:inherit}
+        .modal input:focus,.modal textarea:focus,.modal select:focus{border-color:var(--accent)}
+        .modal textarea{min-height:80px;resize:vertical}
+        .modal .btn-row{display:flex;gap:0.75rem;margin-top:1.5rem;justify-content:flex-end}
+        .modal .btn-row button{padding:0.6rem 1.5rem;border-radius:8px;border:none;font-weight:600;font-size:0.85rem;cursor:pointer;font-family:inherit}
+        .modal .btn-save{background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--glass-border);box-shadow:0 4px 20px rgba(220,20,60,0.12);color:white}
+        .modal .btn-save:hover{opacity:0.9;box-shadow:0 8px 28px rgba(220,20,60,0.25)}
+        .modal .btn-cancel{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+        .modal .btn-cancel:hover{background:rgba(255,255,255,0.05)}
+
+        .empty-state{padding:3rem;text-align:center;color:var(--dim);font-size:0.9rem}
+
+        .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+        .section-header h3{font-size:1.1rem;font-weight:700}
+
+        .add-btn{padding:0.5rem 1.2rem;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 4px 20px rgba(220,20,60,0.12);color:white;font-weight:600;font-size:0.85rem;cursor:pointer;font-family:inherit;transition:opacity 0.2s,box-shadow 0.2s}
+        .add-btn:hover{opacity:0.9;box-shadow:0 8px 28px rgba(220,20,60,0.25)}
+
+        @media(max-width:640px){.admin{padding:1rem}.card .val{font-size:1.6rem}.tab{padding:0.6rem 1rem;font-size:0.8rem}.tab-content{padding:1rem}}
+    </style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginWrap">
+    <div class="login-box">
+        <h2><span style="color:var(--accent)">KILLS</span>test</h2>
+        <p>Панель управления</p>
+        <input type="password" id="passInput" placeholder="Пароль" autofocus>
+        <button onclick="doLogin()">Войти</button>
+        <div class="login-err" id="loginErr">Неверный пароль</div>
+    </div>
+</div>
+
+<div class="admin" id="adminDash">
+    <div class="admin-head">
+        <div style="display:flex;align-items:center;gap:1rem">
+            <h1><span>KILLS</span>test Admin</h1>
+            <div class="status" id="statusBadge">онлайн</div>
+        </div>
+        <div class="admin-btns">
+            <button onclick="refreshAll()">Обновить</button>
+            <a href="/">Сайт</a>
+            <button class="out" onclick="doLogout()">Выйти</button>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">Статистика</button>
+        <button class="tab" data-tab="products" onclick="switchTab('products')">Товары</button>
+        <button class="tab" data-tab="orders" onclick="switchTab('orders')">Заказы</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="tab-content active" id="tab-dashboard">
+        <div class="cards">
+            <div class="card"><div class="label">Товаров</div><div class="val c1" id="sProducts">0</div><div class="sub">активных</div></div>
+            <div class="card"><div class="label">Заказов всего</div><div class="val c2" id="sTotalOrders">0</div><div class="sub">за всё время</div></div>
+            <div class="card"><div class="label">Ожидают</div><div class="val c3" id="sPending">0</div><div class="sub">новых заказов</div></div>
+            <div class="card"><div class="label">Выполнено</div><div class="val c4" id="sCompleted">0</div><div class="sub">успешных</div></div>
+            <div class="card"><div class="label">Выручка</div><div class="val c5" id="sRevenue">0</div><div class="sub">USDT</div></div>
+            <div class="card"><div class="label">Покупателей</div><div class="val c6" id="sBuyers">0</div><div class="sub">уникальных</div></div>
+        </div>
+    </div>
+
+    <!-- Products -->
+    <div class="tab-content" id="tab-products">
+        <div class="section-header">
+            <h3>Управление товарами</h3>
+            <button class="add-btn" onclick="openProductModal()">+ Добавить товар</button>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>ID</th><th>Название</th><th>Категория</th><th>Цена</th><th>Статус</th><th>Дата</th><th></th></tr>
+                </thead>
+                <tbody id="productsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Orders -->
+    <div class="tab-content" id="tab-orders">
+        <div class="section-header">
+            <h3>Заказы</h3>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>ID</th><th>Товар</th><th>Пользователь</th><th>Сумма</th><th>TX Hash</th><th>Статус</th><th>Дата</th><th></th></tr>
+                </thead>
+                <tbody id="ordersBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Product Modal -->
+<div class="modal-overlay" id="productModal">
+    <div class="modal">
+        <h2 id="productModalTitle">Добавить товар</h2>
+        <label>Название</label>
+        <input type="text" id="pName" placeholder="Название товара">
+        <label>Описание</label>
+        <textarea id="pDesc" placeholder="Описание товара"></textarea>
+        <label>Цена (USDT)</label>
+        <input type="number" id="pPrice" step="0.01" min="0" placeholder="0.00">
+        <label>Категория</label>
+        <input type="text" id="pCategory" placeholder="general">
+        <div class="btn-row">
+            <button class="btn-cancel" onclick="closeProductModal()">Отмена</button>
+            <button class="btn-save" id="productSaveBtn" onclick="saveProduct()">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    var API = '';
+    var editingProductId = null;
+
+    function getHeaders(){
+        return { 'Content-Type': 'application/json' };
+    }
+
+    function api(url, method, body){
+        return fetch(API + url, {
+            method: method || 'GET',
+            headers: getHeaders(),
+            body: body ? JSON.stringify(body) : undefined
+        }).then(function(r){
+            if(r.status === 401){
+                doLogout();
+                throw new Error('Unauthorized');
+            }
+            return r.json();
+        });
+    }
+
+    // Auth
+    function doLogin(){
+        var p = document.getElementById('passInput').value;
+        api('/api/admin/login', 'POST', { password: p })
+            .then(function(data){
+                if(data.success){
+                    document.getElementById('loginWrap').style.display = 'none';
+                    document.getElementById('adminDash').style.display = 'block';
+                    refreshAll();
+                }
+            })
+            .catch(function(){
+                document.getElementById('loginErr').style.display = 'block';
+                document.getElementById('passInput').value = '';
+            });
+    }
+
+    function doLogout(){
+        api('/api/admin/logout', 'POST').catch(function(){});
+        document.getElementById('adminDash').style.display = 'none';
+        document.getElementById('loginWrap').style.display = 'flex';
+        document.getElementById('passInput').value = '';
+    }
+
+    document.getElementById('passInput').addEventListener('keydown', function(e){
+        if(e.key === 'Enter') doLogin();
+    });
+
+    // Check session
+    api('/api/admin/check', 'GET')
+        .then(function(data){
+            if(data.logged_in){
+                document.getElementById('loginWrap').style.display = 'none';
+                document.getElementById('adminDash').style.display = 'block';
+                refreshAll();
+            }
+        })
+        .catch(function(){});
+
+    // Tabs
+    function switchTab(name){
+        document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+        document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+        document.querySelector('.tab[data-tab="' + name + '"]').classList.add('active');
+        document.getElementById('tab-' + name).classList.add('active');
+        if(name === 'products') loadProductsTable();
+        if(name === 'orders') loadOrdersTable();
+    }
+
+    // Refresh
+    function refreshAll(){
+        loadStats();
+        if(document.getElementById('tab-products').classList.contains('active')) loadProductsTable();
+        if(document.getElementById('tab-orders').classList.contains('active')) loadOrdersTable();
+    }
+
+    // Stats
+    function loadStats(){
+        api('/api/admin/stats', 'GET').then(function(s){
+            document.getElementById('sProducts').textContent = s.products;
+            document.getElementById('sTotalOrders').textContent = s.total_orders;
+            document.getElementById('sPending').textContent = s.pending_orders;
+            document.getElementById('sCompleted').textContent = s.completed_orders;
+            document.getElementById('sRevenue').textContent = s.total_revenue;
+            document.getElementById('sBuyers').textContent = s.unique_buyers;
+            document.getElementById('statusBadge').textContent = 'онлайн';
+        }).catch(function(){});
+    }
+
+    // Products Table
+    function loadProductsTable(){
+        var tbody = document.getElementById('productsBody');
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Загрузка...</td></tr>';
+        api('/api/admin/products', 'GET').then(function(products){
+            if(!products || !products.length){
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Нет товаров</td></tr>';
+                return;
+            }
+            var html = '';
+            products.forEach(function(p){
+                var status = p.is_active ? '<span class="badge green">активен</span>' : '<span class="badge red">скрыт</span>';
+                html +=
+                    '<tr>' +
+                        '<td>' + p.id + '</td>' +
+                        '<td>' + p.name + '</td>' +
+                        '<td>' + (p.category || '—') + '</td>' +
+                        '<td>' + p.price + ' USDT</td>' +
+                        '<td>' + status + '</td>' +
+                        '<td>' + (p.created_at || '') + '</td>' +
+                        '<td>' +
+                            '<button class="action-btn" onclick="openProductModal(' + p.id + ')">✎</button> ' +
+                            '<button class="action-btn danger" onclick="deleteProduct(' + p.id + ')">✕</button>' +
+                        '</td>' +
+                    '</tr>';
+            });
+            tbody.innerHTML = html;
+        }).catch(function(){
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Ошибка загрузки</td></tr>';
+        });
+    }
+
+    // Product CRUD
+    function openProductModal(id){
+        editingProductId = id || null;
+        document.getElementById('productModalTitle').textContent = id ? 'Редактировать товар' : 'Добавить товар';
+        document.getElementById('productSaveBtn').textContent = id ? 'Сохранить' : 'Добавить';
+
+        if(id){
+            api('/api/admin/products', 'GET').then(function(products){
+                var p = products.find(function(x){ return x.id === id; });
+                if(p){
+                    document.getElementById('pName').value = p.name || '';
+                    document.getElementById('pDesc').value = p.description || '';
+                    document.getElementById('pPrice').value = p.price || '';
+                    document.getElementById('pCategory').value = p.category || '';
+                }
+            });
+        } else {
+            document.getElementById('pName').value = '';
+            document.getElementById('pDesc').value = '';
+            document.getElementById('pPrice').value = '';
+            document.getElementById('pCategory').value = 'general';
+        }
+        document.getElementById('productModal').classList.add('active');
+    }
+
+    function closeProductModal(){
+        document.getElementById('productModal').classList.remove('active');
+        editingProductId = null;
+    }
+
+    function saveProduct(){
+        var name = document.getElementById('pName').value.trim();
+        var desc = document.getElementById('pDesc').value.trim();
+        var price = parseFloat(document.getElementById('pPrice').value);
+        var category = document.getElementById('pCategory').value.trim() || 'general';
+
+        if(!name){ alert('Введите название'); return; }
+        if(isNaN(price) || price <= 0){ alert('Введите корректную цену'); return; }
+
+        var body = { name: name, description: desc, price: price, category: category };
+
+        var req;
+        if(editingProductId){
+            req = api('/api/admin/products/' + editingProductId, 'PUT', body);
+        } else {
+            req = api('/api/admin/products', 'POST', body);
+        }
+
+        req.then(function(){
+            closeProductModal();
+            loadProductsTable();
+            loadStats();
+        }).catch(function(){
+            alert('Ошибка сохранения');
+        });
+    }
+
+    function deleteProduct(id){
+        if(!confirm('Удалить товар #' + id + '?')) return;
+        api('/api/admin/products/' + id, 'DELETE').then(function(){
+            loadProductsTable();
+            loadStats();
+        }).catch(function(){
+            alert('Ошибка удаления');
+        });
+    }
+
+    // Orders Table
+    function loadOrdersTable(){
+        var tbody = document.getElementById('ordersBody');
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Загрузка...</td></tr>';
+        api('/api/admin/orders', 'GET').then(function(orders){
+            if(!orders || !orders.length){
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Нет заказов</td></tr>';
+                return;
+            }
+            var html = '';
+            orders.forEach(function(o){
+                var statusBadge, statusActions = '';
+                var status = o.status || 'pending';
+
+                var statusMap = {
+                    'pending': '<span class="badge yellow">ожидание</span>',
+                    'awaiting_confirmation': '<span class="badge blue">ждёт подтверждения</span>',
+                    'completed': '<span class="badge green">выполнен</span>',
+                    'rejected': '<span class="badge red">отклонён</span>'
+                };
+                statusBadge = statusMap[status] || '<span class="badge">' + status + '</span>';
+
+                if(status === 'pending' || status === 'awaiting_confirmation'){
+                    statusActions =
+                        '<button class="action-btn green" onclick="updateOrderStatus(' + o.id + ', \'completed\')">✓</button> ' +
+                        '<button class="action-btn danger" onclick="updateOrderStatus(' + o.id + ', \'rejected\')">✕</button>';
+                }
+
+                var txHash = o.tx_hash ? '<code style="font-size:0.75rem;color:var(--accent2)">' + o.tx_hash.substring(0, 16) + '...</code>' : '—';
+                var username = o.username ? '@' + o.username : (o.user_id || '—');
+
+                html +=
+                    '<tr>' +
+                        '<td>#' + o.id + '</td>' +
+                        '<td>' + (o.product_name || '—') + '</td>' +
+                        '<td>' + username + '</td>' +
+                        '<td>' + o.amount + ' USDT</td>' +
+                        '<td>' + txHash + '</td>' +
+                        '<td>' + statusBadge + '</td>' +
+                        '<td style="font-size:0.75rem;color:var(--dim)">' + (o.created_at || '') + '</td>' +
+                        '<td>' + statusActions + '</td>' +
+                    '</tr>';
+            });
+            tbody.innerHTML = html;
+        }).catch(function(){
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Ошибка загрузки</td></tr>';
+        });
+    }
+
+    function updateOrderStatus(orderId, status){
+        api('/api/admin/orders/' + orderId + '/status', 'PUT', { status: status })
+            .then(function(){
+                loadOrdersTable();
+                loadStats();
+            })
+            .catch(function(){
+                alert('Ошибка обновления статуса');
+            });
+    }
+
+    // Modal close on overlay click
+    document.getElementById('productModal').addEventListener('click', function(e){
+        if(e.target === this) closeProductModal();
+    });
+    document.addEventListener('keydown', function(e){
+        if(e.key === 'Escape') closeProductModal();
+    });
+</script>
+</body>
+</html>
