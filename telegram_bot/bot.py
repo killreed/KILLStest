@@ -7,17 +7,15 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.client.session.aiohttp import AiohttpSession
 import database as db
-from config import BOT_TOKEN, ADMIN_IDS, WALLET_ADDRESS, CURRENCY, PROXY
+from config import BOT_TOKEN, ADMIN_IDS, WALLET_ADDRESS, CURRENCY
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 STICKER_ID = "CAACAgIAAxkBAAEBI3tqEE0wy1Kf_YJwOB5OomVOWxsDvAACc4QAAolZUUqfxgrLunneZDsE"
 
-session = AiohttpSession(proxy=PROXY) if PROXY else None
-bot = Bot(token=BOT_TOKEN, session=session, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 # ── Users DB ──
