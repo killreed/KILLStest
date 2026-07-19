@@ -175,26 +175,29 @@ async def reply_catalog(message: types.Message):
 @dp.message(F.text == "👤 Профиль")
 async def reply_profile(message: types.Message):
     if not await require_sub(message): return
-    user = await db.get_user(message.from_user.id)
-    orders = await db.get_user_orders(message.from_user.id)
-    completed = len([o for o in orders if o["status"] == "completed"])
-    ref = await db.get_or_create_ref(message.from_user.id)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💰 Пополнить", callback_data="deposit"),
-         InlineKeyboardButton(text="📦 Мои покупки", callback_data="my_orders")],
-        [InlineKeyboardButton(text="🔗 Рефералка", callback_data="referral"),
-         InlineKeyboardButton(text="💸 Передать", callback_data="transfer")]
-    ])
-    await message.answer(
-        f"👤 <b>Мой профиль</b>\n\n"
-        f"🪪 ID: <code>{user['id']}</code>\n"
-        f"💰 Баланс: <b>{user['balance']:.2f}₽</b>\n"
-        f"🛒 Покупок: {len(orders)}\n"
-        f"💵 Потрачено: {user['total_spent']:.2f}₽\n"
-        f"🔗 Рефералов: {ref['earned']:.2f}₽\n"
-        f"🗓 Рега: {user['registered_at']}",
-        reply_markup=kb
-    )
+    try:
+        user = await db.get_user(message.from_user.id)
+        orders = await db.get_user_orders(message.from_user.id)
+        completed = len([o for o in orders if o["status"] == "completed"])
+        ref = await db.get_or_create_ref(message.from_user.id)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💰 Пополнить", callback_data="deposit"),
+             InlineKeyboardButton(text="📦 Мои покупки", callback_data="my_orders")],
+            [InlineKeyboardButton(text="🔗 Рефералка", callback_data="referral"),
+             InlineKeyboardButton(text="💸 Передать", callback_data="transfer")]
+        ])
+        await message.answer(
+            f"👤 <b>Мой профиль</b>\n\n"
+            f"🪪 ID: <code>{user['id']}</code>\n"
+            f"💰 Баланс: <b>{user['balance']:.2f}₽</b>\n"
+            f"🛒 Покупок: {len(orders)}\n"
+            f"💵 Потрачено: {user['total_spent']:.2f}₽\n"
+            f"🔗 Рефералов: {ref['earned']:.2f}₽\n"
+            f"🗓 Рега: {user['registered_at']}",
+            reply_markup=kb
+        )
+    except Exception as e:
+        await message.answer(f"❌ Ошибка профиля: {e}")
 
 
 # ── Пополнить ──
